@@ -127,13 +127,43 @@ export async function POST(request: NextRequest) {
       ? allHistory.slice(-HISTORY_LIMIT)
       : [];
 
-    // Build messages for AI
-    const aiMessages: AIMessage[] = limitedHistory.map((msg) => ({
-      role: msg.role as "user" | "assistant" | "system",
-      content: msg.content,
-      tool_calls: msg.tool_calls as AIToolCall[] | undefined,
-      tool_call_id: msg.tool_call_id || undefined,
-    }));
+    // Build messages for AI - properly reconstruct tool message pairs
+    const aiMessages: AIMessage[] = [];
+    const toolMessagesByCallId: Map<string, { role: "tool"; content: string; tool_call_id: string }> = new Map();
+    
+    // First pass: collect all messages and tool messages
+    for (let i = 0; i < limitedHistory.length; i++) {
+      const msg = limitedHistory[i];
+      const role = msg.role as "user" | "assistant" | "system" | "tool";
+      
+      if (role === "tool" && msg.tool_call_id) {
+        // Store tool messages by their tool_call_id
+        toolMessagesByCallId.set(msg.tool_call_id, {
+          role: "tool",
+          content: msg.content,
+          tool_call_id: msg.tool_call_id,
+        });
+        continue;
+      }
+      
+      const aiMsg: AIMessage = {
+        role: role as "user" | "assistant" | "system",
+        content: msg.content,
+        tool_calls: msg.tool_calls as AIToolCall[] | undefined,
+      };
+      
+      aiMessages.push(aiMsg);
+      
+      // If this is an assistant message with tool_calls, add corresponding tool messages immediately after
+      if (role === "assistant" && msg.tool_calls) {
+        for (const toolCall of msg.tool_calls as AIToolCall[]) {
+          const toolMsg = toolMessagesByCallId.get(toolCall.id);
+          if (toolMsg) {
+            aiMessages.push(toolMsg);
+          }
+        }
+      }
+    }
 
     // Add current user message
     aiMessages.push({
@@ -180,15 +210,17 @@ export async function POST(request: NextRequest) {
                 if (toolCalls.length > 0) {
                   const toolMessages: AIMessage[] = [];
                   
+                  // First, add assistant message with tool_calls
+                  toolMessages.push({
+                    role: "assistant",
+                    content: fullContent || "",
+                    tool_calls: toolCalls,
+                  });
+                  
+                  // Then add tool results
                   for (const toolCall of toolCalls) {
                     try {
                       const toolResult = await executeTool(toolCall, user.id);
-                      
-                      toolMessages.push({
-                        role: "assistant",
-                        content: "",
-                        tool_calls: [toolCall],
-                      });
                       
                       toolMessages.push({
                         role: "tool",
@@ -208,9 +240,12 @@ export async function POST(request: NextRequest) {
                   }
 
                   // Get AI response with tool results
+                  // messagesWithToolResults should include: ...aiMessages, assistant_with_tools, tool_results
+                  const messagesWithToolResults: AIMessage[] = [...aiMessages, ...toolMessages];
+                  
                   let toolResponseContent = "";
                   for await (const chunk of aiServiceManager.chatStream(
-                    [...aiMessages, ...toolMessages],
+                    messagesWithToolResults,
                     {
                       systemPrompt: SYSTEM_PROMPT,
                       temperature: 0.7,

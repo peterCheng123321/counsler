@@ -249,7 +249,7 @@ export default function ChatbotPage() {
   };
 
   return (
-    <div className="flex h-[calc(100vh-8rem)] gap-4 overflow-hidden">
+    <div className="flex h-[calc(100vh-6rem)] gap-3 overflow-hidden">
       {/* Chat History Sidebar */}
       <ChatHistory
         selectedConversation={selectedConversation}
@@ -260,17 +260,17 @@ export default function ChatbotPage() {
       {/* Chat Area */}
       <div className="flex flex-1 flex-col min-w-0">
         {/* Messages Area */}
-        <div className="flex-1 overflow-y-auto p-6 md:p-8 lg:p-12">
-          <div className="mx-auto max-w-4xl space-y-6">
+        <div className="flex-1 overflow-y-auto p-4 md:p-6 lg:p-8">
+          <div className="mx-auto max-w-4xl space-y-4">
             {messages.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-16 md:py-24">
-                <div className="mb-8 rounded-full bg-gradient-to-br from-primary/20 to-primary/10 p-6 backdrop-blur-sm animate-pulse">
-                  <Sparkles className="h-10 w-10 text-primary" />
+              <div className="flex flex-col items-center justify-center py-8 md:py-12">
+                <div className="mb-6 rounded-full bg-gradient-to-br from-primary/20 to-primary/10 p-5 backdrop-blur-sm animate-pulse">
+                  <Sparkles className="h-8 w-8 text-primary" />
                 </div>
-                <h2 className="text-2xl md:text-3xl font-bold mb-3 text-heading-1">
+                <h2 className="text-2xl md:text-3xl font-bold mb-2 text-heading-1">
                   How can I help you today?
                 </h2>
-                <p className="text-base md:text-lg text-text-secondary mb-10 text-center max-w-lg">
+                <p className="text-sm md:text-base text-text-secondary mb-6 text-center max-w-lg">
                   Ask me about students, deadlines, or generate a Letter of Recommendation.
                 </p>
                 <SuggestionChips
@@ -300,9 +300,9 @@ export default function ChatbotPage() {
         </div>
 
         {/* Input Area */}
-        <div className="border-t border-border/50 bg-gradient-to-t from-background via-background/95 to-background/80 p-5 md:p-6 backdrop-blur-xl shadow-[0_-4px_24px_rgba(0,0,0,0.04)]">
+        <div className="border-t border-border/50 bg-gradient-to-t from-background via-background/95 to-background/80 p-4 md:p-5 backdrop-blur-xl shadow-[0_-4px_24px_rgba(0,0,0,0.04)]">
           <div className="mx-auto max-w-4xl">
-            <div className="flex items-end gap-3 rounded-2xl border-2 border-border/50 bg-surface/80 backdrop-blur-sm p-3 shadow-lg transition-all duration-200 hover:shadow-xl focus-within:border-primary focus-within:shadow-2xl focus-within:shadow-primary/10">
+            <div className="flex items-end gap-3 rounded-xl border-2 border-border/50 bg-surface/80 backdrop-blur-sm p-2.5 shadow-lg transition-all duration-200 hover:shadow-xl focus-within:border-primary focus-within:shadow-2xl focus-within:shadow-primary/10">
               <Button variant="ghost" size="icon" className="shrink-0 hover:bg-primary/10 transition-colors">
                 <Paperclip className="h-5 w-5 text-text-secondary" />
               </Button>
@@ -327,7 +327,7 @@ export default function ChatbotPage() {
               </Button>
             </div>
             {messages.length > 0 && !isTyping && (
-              <div className="mt-5">
+              <div className="mt-3">
                 <SuggestionChips
                   suggestions={welcomeSuggestions.slice(0, 3)}
                   onSuggestionClick={handleSuggestionClick}
