@@ -95,7 +95,11 @@ export default function DashboardPage() {
   }).slice(0, 5);
 
   const handleQuickAction = (action: string) => {
-    router.push(`/chatbot?action=${action}`);
+    if (action === "analyze") {
+      router.push(`/chatbot?action=analyze`);
+    } else {
+      router.push(`/chatbot?action=${action}`);
+    }
   };
 
   return (

@@ -11,6 +11,7 @@ export default async function Home() {
     redirect("/auth/login");
   }
 
-  redirect("/dashboard");
+  // Dashboard is at root / route via (app)/page.tsx
+  return null;
 }
 
