@@ -38,9 +38,13 @@ Key guidelines:
 Always be helpful and professional.`;
 
 async function sendSSEChunk(controller: ReadableStreamDefaultController, data: any) {
-  const encoder = new TextEncoder();
-  const chunk = encoder.encode(`data: ${JSON.stringify(data)}\n\n`);
-  controller.enqueue(chunk);
+  try {
+    const encoder = new TextEncoder();
+    const chunk = encoder.encode(`data: ${JSON.stringify(data)}\n\n`);
+    controller.enqueue(chunk);
+  } catch (error) {
+    console.error("Error sending SSE chunk:", error);
+  }
 }
 
 export async function POST(request: NextRequest) {
@@ -71,7 +75,6 @@ export async function POST(request: NextRequest) {
         .single();
 
       if (convError) {
-        console.error("Failed to create conversation:", convError);
         return NextResponse.json(
           { error: "Failed to create conversation" },
           { status: 500 }
@@ -91,32 +94,91 @@ export async function POST(request: NextRequest) {
       });
 
     if (userMsgError) {
-      console.error("Failed to save user message:", userMsgError);
+      console.error("Error saving user message:", userMsgError);
+      return NextResponse.json(
+        { error: "Failed to save user message", details: userMsgError.message },
+        { status: 500 }
+      );
     }
 
     // Get conversation history (limited to last N messages)
-    const { data: allHistory, error: historyError } = await supabase
+    const { data: allHistory } = await supabase
       .from("messages")
       .select("role, content, tool_calls, tool_call_id")
       .eq("conversation_id", convId)
       .order("created_at", { ascending: true });
-
-    if (historyError) {
-      console.error("Failed to fetch history:", historyError);
-    }
 
     // Limit history to last N messages (keep system context)
     const limitedHistory = allHistory
       ? allHistory.slice(-HISTORY_LIMIT)
       : [];
 
-    // Build messages for AI
-    const aiMessages: AIMessage[] = limitedHistory.map((msg) => ({
-      role: msg.role as "user" | "assistant" | "system",
-      content: msg.content,
-      tool_calls: msg.tool_calls as AIToolCall[] | undefined,
-      tool_call_id: msg.tool_call_id || undefined,
-    }));
+    // Build messages for AI, ensuring tool messages are properly paired
+    const aiMessages: AIMessage[] = [];
+    
+    for (let i = 0; i < limitedHistory.length; i++) {
+      const msg = limitedHistory[i];
+      
+      // Handle assistant messages with tool_calls
+      if (msg.role === "assistant" && msg.tool_calls && Array.isArray(msg.tool_calls) && msg.tool_calls.length > 0) {
+        // Collect all tool_call_ids we need responses for
+        const toolCallIds = msg.tool_calls.map((tc: any) => tc.id).filter(Boolean);
+        
+        // Look ahead to find all tool responses
+        const remainingMessages = limitedHistory.slice(i + 1);
+        const foundToolResponses: any[] = [];
+        
+        for (const toolCallId of toolCallIds) {
+          const toolMsg = remainingMessages.find((m) => m.role === "tool" && m.tool_call_id === toolCallId);
+          if (toolMsg) {
+            foundToolResponses.push(toolMsg);
+          }
+        }
+        
+        // Only include this assistant message if ALL tool responses are found
+        if (foundToolResponses.length === toolCallIds.length) {
+          // Add assistant message with tool_calls
+          aiMessages.push({
+            role: "assistant",
+            content: msg.content,
+            tool_calls: msg.tool_calls as AIToolCall[],
+          });
+          
+          // Add all tool response messages in order
+          for (const toolMsg of foundToolResponses) {
+            aiMessages.push({
+              role: "tool",
+              content: toolMsg.content,
+              tool_call_id: toolMsg.tool_call_id,
+            });
+          }
+          
+          // Skip the tool messages we just added
+          i += foundToolResponses.length;
+        } else {
+          // Not all tool responses found - skip this assistant message entirely
+          // or add it without tool_calls to avoid errors
+          console.warn(`Skipping assistant message with incomplete tool responses. Found ${foundToolResponses.length}/${toolCallIds.length} responses.`);
+          // Skip it entirely to avoid errors
+        }
+        continue;
+      }
+      
+      // Handle tool messages - skip them here as they're handled above
+      if (msg.role === "tool") {
+        continue;
+      }
+      
+      // Include user, assistant (without tool_calls), and system messages
+      if (msg.role === "user" || msg.role === "system" || (msg.role === "assistant" && (!msg.tool_calls || msg.tool_calls.length === 0))) {
+        aiMessages.push({
+          role: msg.role,
+          content: msg.content,
+          tool_calls: undefined,
+          tool_call_id: undefined,
+        });
+      }
+    }
 
     // Add current user message
     aiMessages.push({
@@ -147,6 +209,7 @@ export async function POST(request: NextRequest) {
                 });
               } else if (chunk.type === "tool_call" && chunk.toolCall) {
                 toolCalls.push(chunk.toolCall);
+                // Send tool_call event to frontend for UI state, not as content
                 await sendSSEChunk(controller, {
                   type: "tool_call",
                   toolCall: chunk.toolCall,
@@ -161,15 +224,46 @@ export async function POST(request: NextRequest) {
               } else if (chunk.type === "done") {
                 // Process tool calls if any
                 if (toolCalls.length > 0) {
+                  // Only save assistant message with tool_calls if there's content
+                  // Some AI models send tool calls without initial content
+                  if (fullContent.trim()) {
+                    const { error: assistantMsgError } = await supabase
+                      .from("messages")
+                      .insert({
+                        conversation_id: convId,
+                        role: "assistant",
+                        content: fullContent,
+                        tool_calls: toolCalls,
+                      });
+
+                    if (assistantMsgError) {
+                      console.error("Error saving assistant message with tool_calls:", assistantMsgError);
+                    }
+                  }
+
                   const toolMessages: AIMessage[] = [];
                   
                   for (const toolCall of toolCalls) {
                     try {
                       const toolResult = await executeTool(toolCall, user.id);
                       
+                      // Save tool response message
+                      const { error: toolMsgError } = await supabase
+                        .from("messages")
+                        .insert({
+                          conversation_id: convId,
+                          role: "tool",
+                          content: JSON.stringify(toolResult.result),
+                          tool_call_id: toolCall.id,
+                        });
+
+                      if (toolMsgError) {
+                        console.error("Error saving tool message:", toolMsgError);
+                      }
+                      
                       toolMessages.push({
                         role: "assistant",
-                        content: "",
+                        content: fullContent || "",
                         tool_calls: [toolCall],
                       });
                       
@@ -179,7 +273,29 @@ export async function POST(request: NextRequest) {
                         tool_call_id: toolCall.id,
                       });
                     } catch (error) {
-                      console.error(`Tool execution error for ${toolCall.name}:`, error);
+                      console.error("Tool execution error:", error);
+                      // Save error tool response
+                      const { error: toolMsgError } = await supabase
+                        .from("messages")
+                        .insert({
+                          conversation_id: convId,
+                          role: "tool",
+                          content: JSON.stringify({
+                            error: error instanceof Error ? error.message : "Unknown error",
+                          }),
+                          tool_call_id: toolCall.id,
+                        });
+
+                      if (toolMsgError) {
+                        console.error("Error saving tool error message:", toolMsgError);
+                      }
+
+                      toolMessages.push({
+                        role: "assistant",
+                        content: fullContent || "",
+                        tool_calls: [toolCall],
+                      });
+                      
                       toolMessages.push({
                         role: "tool",
                         content: JSON.stringify({
@@ -192,7 +308,11 @@ export async function POST(request: NextRequest) {
 
                   // Get AI response with tool results
                   let toolResponseContent = "";
-                  for await (const chunk of aiServiceManager.chatStream(
+                  
+                  // Don't send placeholder text - frontend will handle loading state
+                  
+                  let toolStreamCompleted = false;
+                  for await (const toolChunk of aiServiceManager.chatStream(
                     [...aiMessages, ...toolMessages],
                     {
                       systemPrompt: SYSTEM_PROMPT,
@@ -201,38 +321,78 @@ export async function POST(request: NextRequest) {
                       tools: aiTools,
                     }
                   )) {
-                    if (chunk.type === "token" && chunk.content) {
-                      toolResponseContent += chunk.content;
+                    if (toolChunk.type === "token" && toolChunk.content) {
+                      toolResponseContent += toolChunk.content;
                       await sendSSEChunk(controller, {
                         type: "token",
-                        content: chunk.content,
+                        content: toolChunk.content,
                       });
-                    } else if (chunk.type === "error") {
+                    } else if (toolChunk.type === "error") {
                       await sendSSEChunk(controller, {
                         type: "error",
-                        error: chunk.error,
+                        error: toolChunk.error,
                       });
+                      controller.close();
+                      return;
+                    } else if (toolChunk.type === "done") {
+                      // Tool response stream is complete
+                      toolStreamCompleted = true;
+                      break;
                     }
                   }
 
+                  // If stream ended without "done" event, we still use the content we got
+                  if (!toolStreamCompleted && toolResponseContent.trim()) {
+                    console.log("Tool response stream completed naturally");
+                  }
+
+                  // Only send fallback if absolutely no content was received
+                  if (!toolResponseContent.trim()) {
+                    console.warn("Tool response stream returned empty content. Tool results:", toolMessages.map(m => m.content));
+                    // Don't send placeholder - let the AI model handle this
+                  }
+
+                  // Save final response after tool processing
                   fullContent = toolResponseContent;
-                }
+                  
+                  if (fullContent.trim()) {
+                    const { error: aiMsgError } = await supabase
+                      .from("messages")
+                      .insert({
+                        conversation_id: convId,
+                        role: "assistant",
+                        content: fullContent,
+                        tool_calls: null,
+                        metadata: {
+                          model: "ai-service",
+                          usage: { tokens: 0 },
+                        },
+                      });
 
-                // Save AI response
-                const { error: aiMsgError } = await supabase
-                  .from("messages")
-                  .insert({
-                    conversation_id: convId,
-                    role: "assistant",
-                    content: fullContent,
-                    tool_calls: toolCalls.length > 0 ? toolCalls : null,
-                    metadata: {
-                      model: "ai-service",
-                    },
-                  });
+                    if (aiMsgError) {
+                      console.error("Error saving final AI message (streaming):", aiMsgError);
+                    }
+                  }
+                } else {
+                  // No tool calls - save the regular response
+                  if (fullContent.trim()) {
+                    const { error: aiMsgError } = await supabase
+                      .from("messages")
+                      .insert({
+                        conversation_id: convId,
+                        role: "assistant",
+                        content: fullContent,
+                        tool_calls: null,
+                        metadata: {
+                          model: "ai-service",
+                          usage: { tokens: 0 },
+                        },
+                      });
 
-                if (aiMsgError) {
-                  console.error("Failed to save AI message:", aiMsgError);
+                    if (aiMsgError) {
+                      console.error("Error saving AI message (streaming):", aiMsgError);
+                    }
+                  }
                 }
 
                 // Update conversation timestamp
@@ -246,6 +406,7 @@ export async function POST(request: NextRequest) {
                   conversationId: convId,
                 });
                 controller.close();
+                return;
               }
             }
           } catch (error) {
@@ -280,13 +441,41 @@ export async function POST(request: NextRequest) {
 
       // Handle tool calls
       if (aiResponse.toolCalls && aiResponse.toolCalls.length > 0) {
+        // Save assistant message with tool_calls first
+        const { error: assistantMsgError } = await supabase
+          .from("messages")
+          .insert({
+            conversation_id: convId,
+            role: "assistant",
+            content: aiResponse.content || "",
+            tool_calls: aiResponse.toolCalls,
+          });
+
+        if (assistantMsgError) {
+          console.error("Error saving assistant message with tool_calls:", assistantMsgError);
+        }
+
         for (const toolCall of aiResponse.toolCalls) {
           try {
             const toolResult = await executeTool(toolCall, user.id);
             
+            // Save tool response message
+            const { error: toolMsgError } = await supabase
+              .from("messages")
+              .insert({
+                conversation_id: convId,
+                role: "tool",
+                content: JSON.stringify(toolResult.result),
+                tool_call_id: toolCall.id,
+              });
+
+            if (toolMsgError) {
+              console.error("Error saving tool message:", toolMsgError);
+            }
+
             toolMessages.push({
               role: "assistant",
-              content: aiResponse.content,
+              content: aiResponse.content || "",
               tool_calls: [toolCall],
             });
             
@@ -296,7 +485,28 @@ export async function POST(request: NextRequest) {
               tool_call_id: toolCall.id,
             });
           } catch (error) {
-            console.error(`Tool execution error for ${toolCall.name}:`, error);
+            // Save error tool response
+            const { error: toolMsgError } = await supabase
+              .from("messages")
+              .insert({
+                conversation_id: convId,
+                role: "tool",
+                content: JSON.stringify({
+                  error: error instanceof Error ? error.message : "Unknown error",
+                }),
+                tool_call_id: toolCall.id,
+              });
+
+            if (toolMsgError) {
+              console.error("Error saving tool error message:", toolMsgError);
+            }
+
+            toolMessages.push({
+              role: "assistant",
+              content: aiResponse.content || "",
+              tool_calls: [toolCall],
+            });
+            
             toolMessages.push({
               role: "tool",
               content: JSON.stringify({
@@ -320,14 +530,14 @@ export async function POST(request: NextRequest) {
         finalContent = finalResponse.content;
       }
 
-      // Save AI response
+      // Save final AI response
       const { error: aiMsgError } = await supabase
         .from("messages")
         .insert({
           conversation_id: convId,
           role: "assistant",
           content: finalContent,
-          tool_calls: aiResponse.toolCalls || null,
+          tool_calls: null,
           metadata: {
             model: aiResponse.model,
             usage: aiResponse.usage,
@@ -335,7 +545,11 @@ export async function POST(request: NextRequest) {
         });
 
       if (aiMsgError) {
-        console.error("Failed to save AI message:", aiMsgError);
+        console.error("Error saving AI message:", aiMsgError);
+        return NextResponse.json(
+          { error: "Failed to save AI response", details: aiMsgError.message },
+          { status: 500 }
+        );
       }
 
       // Update conversation timestamp
@@ -361,12 +575,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    console.error("Chat error:", error);
     const errorMessage = error instanceof Error ? error.message : "Failed to process chat message";
-    return NextResponse.json(
-      { error: errorMessage },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: errorMessage }, { status: 500 });
   }
 }
+
 

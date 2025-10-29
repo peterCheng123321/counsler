@@ -31,24 +31,43 @@ export async function GET(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { data, error } = await supabase
+    const { data: task, error } = await supabase
       .from("tasks")
-      .select("*, students(id, first_name, last_name, email)")
+      .select("*")
       .eq("id", id)
       .eq("counselor_id", user.id)
       .single();
 
     if (error) {
-      console.error("Database error:", error);
+      console.error("Error fetching task:", error);
       return NextResponse.json(
-        { error: "Task not found" },
+        { error: "Task not found", details: error.message },
         { status: 404 }
       );
     }
 
-    return NextResponse.json({ data, success: true });
+    // Fetch student data if task has student_id
+    let student = null;
+    if (task.student_id) {
+      const { data: studentData } = await supabase
+        .from("students")
+        .select("id, first_name, last_name, email")
+        .eq("id", task.student_id)
+        .eq("counselor_id", user.id)
+        .single();
+      
+      if (studentData) {
+        student = studentData;
+      }
+    }
+
+    const taskWithStudent = {
+      ...task,
+      students: student,
+    };
+
+    return NextResponse.json({ data: taskWithStudent, success: true });
   } catch (error) {
-    console.error("Unexpected error:", error);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }
@@ -95,30 +114,43 @@ export async function PATCH(
     if (validatedData.reminder1hour !== undefined) updateData.reminder_1hour = validatedData.reminder1hour;
     if (validatedData.reminder15min !== undefined) updateData.reminder_15min = validatedData.reminder15min;
 
-    const { data, error } = await supabase
+    const { data: task, error } = await supabase
       .from("tasks")
       .update(updateData)
       .eq("id", id)
       .eq("counselor_id", user.id)
-      .select("*, students(id, first_name, last_name, email)")
+      .select("*")
       .single();
 
     if (error) {
-      console.error("Database error:", error);
+      console.error("Error updating task:", error);
       return NextResponse.json(
-        { error: "Failed to update task" },
+        { error: "Failed to update task", details: error.message },
         { status: 500 }
       );
     }
 
-    if (!data) {
-      return NextResponse.json(
-        { error: "Task not found" },
-        { status: 404 }
-      );
+    // Fetch student data if task has student_id
+    let student = null;
+    if (task.student_id) {
+      const { data: studentData } = await supabase
+        .from("students")
+        .select("id, first_name, last_name, email")
+        .eq("id", task.student_id)
+        .eq("counselor_id", user.id)
+        .single();
+      
+      if (studentData) {
+        student = studentData;
+      }
     }
 
-    return NextResponse.json({ data, success: true });
+    const taskWithStudent = {
+      ...task,
+      students: student,
+    };
+
+    return NextResponse.json({ data: taskWithStudent, success: true });
   } catch (error) {
     if (error instanceof z.ZodError) {
       return NextResponse.json(
@@ -126,7 +158,6 @@ export async function PATCH(
         { status: 400 }
       );
     }
-    console.error("Unexpected error:", error);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }
@@ -157,7 +188,6 @@ export async function DELETE(
       .eq("counselor_id", user.id);
 
     if (error) {
-      console.error("Database error:", error);
       return NextResponse.json(
         { error: "Failed to delete task" },
         { status: 500 }
@@ -166,7 +196,6 @@ export async function DELETE(
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error("Unexpected error:", error);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }

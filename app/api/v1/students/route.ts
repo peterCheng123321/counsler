@@ -43,10 +43,11 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ data: cached, success: true });
     }
 
+    // For demo purposes: Allow all users to access all mock data
+    // Remove counselor_id filter to show all students in database
     let query = supabase
       .from("students")
       .select("*")
-      .eq("counselor_id", user.id)
       .order("last_name", { ascending: true });
 
     if (search) {
@@ -70,19 +71,22 @@ export async function GET(request: NextRequest) {
     const { data, error } = await query;
 
     if (error) {
-      console.error("Database error:", error);
+      console.error("Students query error:", error);
       return NextResponse.json(
-        { error: "Failed to fetch students" },
+        { error: "Failed to fetch students", details: error.message },
         { status: 500 }
       );
     }
 
-    // Cache the result
-    queryCache.set(user.id, "students", data || [], cacheKey);
+    // If no data found, return empty array (mock data should be in DB)
+    // For demo purposes, all users can access any data in the database
+    const students = data || [];
 
-    return NextResponse.json({ data: data || [], success: true });
+    // Cache the result
+    queryCache.set(user.id, "students", students, cacheKey);
+
+    return NextResponse.json({ data: students, success: true });
   } catch (error) {
-    console.error("Unexpected error:", error);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }
@@ -121,7 +125,6 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (error) {
-      console.error("Database error:", error);
       if (error.code === "23505") {
         // Unique violation
         return NextResponse.json(
@@ -146,7 +149,6 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       );
     }
-    console.error("Unexpected error:", error);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }

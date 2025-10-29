@@ -22,11 +22,14 @@ export function ChatHistory({
 }: ChatHistoryProps) {
   const [searchQuery, setSearchQuery] = useState("");
 
-  const { data: conversationsData, isLoading } = useQuery({
+  const { data: conversationsData, isLoading, error } = useQuery({
     queryKey: ["conversations"],
     queryFn: () => apiClient.getConversations(),
-    refetchOnMount: true,
-    staleTime: 30000, // Consider data stale after 30 seconds
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
+    staleTime: 5 * 60 * 1000, // 5 minutes - don't refetch unless data is stale
+    gcTime: 10 * 60 * 1000, // Keep in cache for 10 minutes
+    retry: 2,
   });
 
   const conversations = conversationsData?.data || [];
@@ -59,39 +62,55 @@ export function ChatHistory({
   };
 
   return (
-    <aside className="w-64 md:w-72 flex h-full flex-col border-r border-border/50 bg-surface/50 backdrop-blur-sm shrink-0 shadow-xl">
+    <aside className="w-64 md:w-72 flex h-full flex-col border-r border-border/50 bg-surface/50 backdrop-blur-sm shrink-0 shadow-xl transition-all duration-300 ease-in-out">
       {/* New Chat Button */}
-      <div className="border-b border-border/50 p-4 shrink-0 bg-gradient-to-r from-surface to-surface/80">
+      <div className="border-b border-border/50 p-4 shrink-0 bg-gradient-to-r from-surface to-surface/80 transition-all duration-300 ease-in-out">
         <Button
-          className="w-full font-semibold shadow-md hover:shadow-lg transition-all duration-200"
+          className="w-full font-semibold shadow-md hover:shadow-lg transition-all duration-300 ease-out"
           onClick={handleNewChatClick}
           variant={selectedConversation === null ? "default" : "outline"}
         >
-          <Plus className="h-4 w-4 mr-2" />
+          <Plus className="h-4 w-4 mr-2 transition-transform duration-300 ease-out group-hover:rotate-90" />
           New Chat
         </Button>
       </div>
 
       {/* Search */}
-      <div className="border-b border-border/50 p-4 shrink-0 bg-gradient-to-r from-surface to-surface/80">
+      <div className="border-b border-border/50 p-4 shrink-0 bg-gradient-to-r from-surface to-surface/80 transition-all duration-300 ease-in-out">
         <div className="relative">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-tertiary" />
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-tertiary transition-colors duration-300" />
           <Input
             placeholder="Search chats..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-10 bg-background/50 border-border/50 focus:border-primary transition-colors"
+            className="pl-10 bg-background/50 border-border/50 focus:border-primary transition-all duration-300 ease-out"
           />
         </div>
       </div>
 
       {/* Conversations List */}
-      <div className="flex-1 overflow-y-auto p-4 min-h-0">
+      <div className="flex-1 overflow-y-auto p-4 min-h-0 transition-all duration-300 ease-in-out">
         {isLoading ? (
-          <div className="space-y-3">
+          <div className="space-y-3 animate-fade-in">
             {[...Array(5)].map((_, i) => (
-              <Skeleton key={i} className="h-20 rounded-xl" />
+              <Skeleton 
+                key={i} 
+                className="h-20 rounded-xl bg-gradient-to-r from-surface via-surface/50 to-surface transition-all duration-500 ease-in-out animate-pulse"
+                style={{ animationDelay: `${i * 0.1}s` }}
+              />
             ))}
+          </div>
+        ) : error ? (
+          <div className="py-12 text-center">
+            <div className="text-sm text-error mb-2">
+              Failed to load conversations
+            </div>
+            <button
+              onClick={() => window.location.reload()}
+              className="text-xs text-primary hover:underline"
+            >
+              Retry
+            </button>
           </div>
         ) : (
           <>
@@ -105,10 +124,10 @@ export function ChatHistory({
                     <button
                       key={conv.id}
                       onClick={() => onSelectConversation(conv.id)}
-                      className={`w-full rounded-xl p-3.5 text-left transition-all duration-200 ${
+                      className={`w-full rounded-xl p-3.5 text-left transition-all duration-300 ease-out ${
                         selectedConversation === conv.id
-                          ? "bg-gradient-to-r from-primary-light to-primary/10 border-l-4 border-primary shadow-lg"
-                          : "hover:bg-background/50 border-l-4 border-transparent hover:border-border"
+                          ? "bg-gradient-to-r from-primary-light to-primary/10 border-l-4 border-primary shadow-lg scale-[1.02]"
+                          : "hover:bg-background/50 border-l-4 border-transparent hover:border-border hover:scale-[1.01]"
                       }`}
                     >
                       <div className="text-sm font-semibold text-text-primary truncate">
@@ -133,10 +152,10 @@ export function ChatHistory({
                     <button
                       key={conv.id}
                       onClick={() => onSelectConversation(conv.id)}
-                      className={`w-full rounded-xl p-3.5 text-left transition-all duration-200 ${
+                      className={`w-full rounded-xl p-3.5 text-left transition-all duration-300 ease-out ${
                         selectedConversation === conv.id
-                          ? "bg-gradient-to-r from-primary-light to-primary/10 border-l-4 border-primary shadow-lg"
-                          : "hover:bg-background/50 border-l-4 border-transparent hover:border-border"
+                          ? "bg-gradient-to-r from-primary-light to-primary/10 border-l-4 border-primary shadow-lg scale-[1.02]"
+                          : "hover:bg-background/50 border-l-4 border-transparent hover:border-border hover:scale-[1.01]"
                       }`}
                     >
                       <div className="text-sm font-semibold text-text-primary truncate">
@@ -161,10 +180,10 @@ export function ChatHistory({
                     <button
                       key={conv.id}
                       onClick={() => onSelectConversation(conv.id)}
-                      className={`w-full rounded-xl p-3.5 text-left transition-all duration-200 ${
+                      className={`w-full rounded-xl p-3.5 text-left transition-all duration-300 ease-out ${
                         selectedConversation === conv.id
-                          ? "bg-gradient-to-r from-primary-light to-primary/10 border-l-4 border-primary shadow-lg"
-                          : "hover:bg-background/50 border-l-4 border-transparent hover:border-border"
+                          ? "bg-gradient-to-r from-primary-light to-primary/10 border-l-4 border-primary shadow-lg scale-[1.02]"
+                          : "hover:bg-background/50 border-l-4 border-transparent hover:border-border hover:scale-[1.01]"
                       }`}
                     >
                       <div className="text-sm font-semibold text-text-primary truncate">

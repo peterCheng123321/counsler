@@ -4,12 +4,10 @@ import { createClient } from "@/lib/supabase/server";
 export async function GET(request: NextRequest) {
   try {
     const supabase = await createClient();
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser();
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
 
     if (authError || !user) {
+      console.error("Auth error:", authError);
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
@@ -22,7 +20,7 @@ export async function GET(request: NextRequest) {
     if (error) {
       console.error("Failed to fetch conversations:", error);
       return NextResponse.json(
-        { error: "Failed to fetch conversations" },
+        { error: "Failed to fetch conversations", details: error.message },
         { status: 500 }
       );
     }
@@ -31,7 +29,7 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     console.error("Unexpected error:", error);
     return NextResponse.json(
-      { error: "Internal server error" },
+      { error: "Internal server error", details: error instanceof Error ? error.message : String(error) },
       { status: 500 }
     );
   }

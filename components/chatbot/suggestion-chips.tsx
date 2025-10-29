@@ -28,7 +28,7 @@ export function SuggestionChips({
           whileHover={{ scale: 1.05, y: -2 }}
           whileTap={{ scale: 0.95 }}
           onClick={() => onSuggestionClick(suggestion)}
-          className="flex items-center gap-2.5 rounded-full border-2 border-primary/30 bg-gradient-to-r from-surface to-surface/80 px-5 py-2.5 text-sm font-semibold text-primary shadow-md backdrop-blur-sm transition-all duration-200 hover:border-primary hover:bg-gradient-to-r hover:from-primary hover:to-primary-hover hover:text-white hover:shadow-xl hover:shadow-primary/20"
+          className="flex items-center gap-2.5 rounded-full border-2 border-primary/30 bg-gradient-to-r from-surface to-surface/80 px-5 py-2.5 text-sm font-semibold text-primary shadow-md backdrop-blur-sm transition-all duration-500 ease-out hover:border-primary hover:bg-gradient-to-r hover:from-primary hover:to-primary-hover hover:text-white hover:shadow-xl hover:shadow-primary/30 hover:scale-105 active:scale-95"
         >
           <span className="text-lg">{suggestion.icon}</span>
           <span>{suggestion.text}</span>

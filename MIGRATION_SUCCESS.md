@@ -102,3 +102,4 @@ ORDER BY tablename, indexname;
 4. ⚠️ Consider migrating users.id from bigint to UUID if using Supabase Auth
 5. ✅ Your application should now work with the updated schema!
 
+

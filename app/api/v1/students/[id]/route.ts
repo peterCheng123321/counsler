@@ -48,20 +48,12 @@ export async function GET(
       .single();
 
     if (error) {
-      console.error("Database error:", error);
-      return NextResponse.json(
-        { error: "Student not found" },
-        { status: 404 }
-      );
+      return NextResponse.json({ error: "Student not found" }, { status: 404 });
     }
 
     return NextResponse.json({ data, success: true });
   } catch (error) {
-    console.error("Unexpected error:", error);
-    return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
 
@@ -104,18 +96,11 @@ export async function PATCH(
       .single();
 
     if (error) {
-      console.error("Database error:", error);
-      return NextResponse.json(
-        { error: "Failed to update student" },
-        { status: 500 }
-      );
+      return NextResponse.json({ error: "Failed to update student" }, { status: 500 });
     }
 
     if (!data) {
-      return NextResponse.json(
-        { error: "Student not found" },
-        { status: 404 }
-      );
+      return NextResponse.json({ error: "Student not found" }, { status: 404 });
     }
 
     return NextResponse.json({ data, success: true });
@@ -126,11 +111,7 @@ export async function PATCH(
         { status: 400 }
       );
     }
-    console.error("Unexpected error:", error);
-    return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
 
@@ -157,20 +138,13 @@ export async function DELETE(
       .eq("counselor_id", user.id);
 
     if (error) {
-      console.error("Database error:", error);
-      return NextResponse.json(
-        { error: "Failed to delete student" },
-        { status: 500 }
-      );
+      return NextResponse.json({ error: "Failed to delete student" }, { status: 500 });
     }
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error("Unexpected error:", error);
-    return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
+
 

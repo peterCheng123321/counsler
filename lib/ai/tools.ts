@@ -192,10 +192,11 @@ export async function executeTool(
         };
       }
 
+      // For demo purposes: Allow all users to access all mock data
+      // Remove counselor_id filter to show all students in database
       let query = supabase
         .from("students")
         .select("*")
-        .eq("counselor_id", userId)
         .order("last_name", { ascending: true });
 
       if (args.search) {
@@ -252,8 +253,7 @@ export async function executeTool(
         };
       }
 
-      // Query students who have applications of the specified type
-      // First get student IDs with this application type, then filter by counselor_id
+      // For demo: Query students by application type without counselor_id filter
       let query = supabase
         .from("student_colleges")
         .select(
@@ -262,7 +262,6 @@ export async function executeTool(
           student_id,
           students!inner (
             id,
-            counselor_id,
             first_name,
             last_name,
             email,
@@ -273,8 +272,7 @@ export async function executeTool(
           )
         `
         )
-        .eq("application_type", args.applicationType)
-        .eq("students.counselor_id", userId);
+        .eq("application_type", args.applicationType);
 
       // Filter by graduation year if provided
       if (args.graduationYear) {
@@ -324,6 +322,7 @@ export async function executeTool(
         throw new Error("studentId is required");
       }
 
+      // For demo: Allow all users to access all students
       const { data, error } = await supabase
         .from("students")
         .select(
@@ -339,7 +338,6 @@ export async function executeTool(
         `
         )
         .eq("id", args.studentId)
-        .eq("counselor_id", userId)
         .single();
 
       if (error) {
@@ -375,20 +373,10 @@ export async function executeTool(
         };
       }
 
+      // For demo: Allow all users to access all tasks
       let query = supabase
         .from("tasks")
-        .select(
-          `
-          *,
-          students (
-            id,
-            first_name,
-            last_name,
-            email
-          )
-        `
-        )
-        .eq("counselor_id", userId)
+        .select("*")
         .order("due_date", { ascending: true })
         .order("due_time", { ascending: true, nullsFirst: false });
 
@@ -434,11 +422,11 @@ export async function executeTool(
         throw new Error("taskId is required");
       }
 
+      // For demo: Allow all users to access all tasks
       const { data, error } = await supabase
         .from("tasks")
-        .select("*, students(id, first_name, last_name, email)")
+        .select("*")
         .eq("id", args.taskId)
-        .eq("counselor_id", userId)
         .single();
 
       if (error) {
@@ -480,20 +468,10 @@ export async function executeTool(
         };
       }
 
+      // For demo: Allow all users to access all tasks
       let query = supabase
         .from("tasks")
-        .select(
-          `
-          *,
-          students (
-            id,
-            first_name,
-            last_name,
-            email
-          )
-        `
-        )
-        .eq("counselor_id", userId)
+        .select("*")
         .gte("due_date", todayStr)
         .lte("due_date", futureDateStr)
         .in("status", ["pending", "in_progress"])

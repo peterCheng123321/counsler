@@ -23,11 +23,68 @@ export class ApiClient {
       credentials: "include",
     });
 
+    console.log("Response status:", response.status, response.statusText);
+    console.log("Response headers:", Object.fromEntries(response.headers.entries()));
+
     if (!response.ok) {
-      const error = await response.json().catch(() => ({
-        error: "An error occurred",
-      }));
-      throw new Error(error.error || `HTTP error! status: ${response.status}`);
+      let error: any = { error: `HTTP error! status: ${response.status}` };
+      let responseText = "";
+      
+      try {
+        // Clone response before reading to avoid consuming the body
+        const clonedResponse = response.clone();
+        responseText = await clonedResponse.text();
+        console.log("Raw response text length:", responseText.length);
+        console.log("Raw response text:", responseText.substring(0, 500));
+        
+        if (responseText && responseText.trim()) {
+          try {
+            error = JSON.parse(responseText);
+            console.log("Parsed error:", error);
+          } catch (parseError) {
+            console.error("JSON parse error:", parseError);
+            error = { 
+              error: "Failed to parse error response", 
+              raw: responseText.substring(0, 500),
+              parseError: parseError instanceof Error ? parseError.message : String(parseError)
+            };
+          }
+        } else {
+          console.error("Empty response body!");
+          error = { 
+            error: `HTTP error! status: ${response.status} (empty response body)`,
+            status: response.status,
+            statusText: response.statusText
+          };
+        }
+      } catch (textError) {
+        console.error("Error reading response text:", textError);
+        error = { 
+          error: "Failed to read error response",
+          status: response.status,
+          statusText: response.statusText,
+          readError: textError instanceof Error ? textError.message : String(textError)
+        };
+      }
+      
+      // Log full error details in development
+      if (process.env.NODE_ENV === "development") {
+        console.error("API Error:", {
+          endpoint,
+          status: response.status,
+          statusText: response.statusText,
+          responseTextLength: responseText.length,
+          responseTextPreview: responseText.substring(0, 200),
+          error: error.error,
+          details: error.details,
+          code: error.code,
+          hint: error.hint,
+          stack: error.stack,
+          fullError: error,
+        });
+      }
+      
+      throw new Error(error.error || error.details || `HTTP error! status: ${response.status}`);
     }
 
     return response.json();
