@@ -56,15 +56,9 @@ export async function middleware(request: NextRequest) {
   // Protect routes that require authentication
   const protectedPaths = ["/chatbot", "/students", "/tasks", "/"];
   const isProtectedPath = protectedPaths.some((path) =>
-    request.nextUrl.pathname === path || request.nextUrl.pathname.startsWith(path + "/")
+    request.nextUrl.pathname === path || 
+    (path !== "/" && request.nextUrl.pathname.startsWith(path + "/"))
   );
-  
-  // Handle root path specifically
-  if (request.nextUrl.pathname === "/" && !user) {
-    const url = request.nextUrl.clone();
-    url.pathname = "/auth/login";
-    return NextResponse.redirect(url);
-  }
 
   if (!user && isProtectedPath) {
     const url = request.nextUrl.clone();
@@ -76,7 +70,7 @@ export async function middleware(request: NextRequest) {
   // Redirect authenticated users away from login page
   if (user && request.nextUrl.pathname === "/auth/login") {
     const url = request.nextUrl.clone();
-    url.pathname = "/chatbot";
+    url.pathname = "/";
     return NextResponse.redirect(url);
   }
 
