@@ -37,11 +37,20 @@ function LoginForm() {
     setError(null);
 
     try {
-      // Get the current origin (works for both localhost and production)
+      // Get the current origin - this will be the Vercel URL in production
+      // or localhost in development
       const origin = typeof window !== 'undefined' ? window.location.origin : '';
+      
+      // Ensure we have a valid origin
+      if (!origin) {
+        throw new Error("Unable to determine site URL");
+      }
+      
       const redirectTo = `${origin}/auth/callback`;
+      
+      console.log("OAuth redirect URL:", redirectTo); // Debug log
 
-      const { error: oauthError } = await supabase.auth.signInWithOAuth({
+      const { error: oauthError, data } = await supabase.auth.signInWithOAuth({
         provider: "google",
         options: {
           redirectTo,
@@ -56,6 +65,9 @@ function LoginForm() {
         console.error("Login error:", oauthError);
         setError(oauthError.message || "Failed to initiate Google login");
         setIsLoading(false);
+      } else if (data?.url) {
+        // Log the URL that Supabase is redirecting to (for debugging)
+        console.log("Supabase redirect URL:", data.url);
       }
       // If successful, the user will be redirected, so we don't need to handle that case
     } catch (err) {
