@@ -55,6 +55,7 @@ export default function StudentDetailPage({
       const response = await fetch(`/api/v1/analysis`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({
           module: "risk_scoring",
           studentId: id,
@@ -70,7 +71,9 @@ export default function StudentDetailPage({
   const { data: summaryData, refetch: refetchSummary } = useQuery({
     queryKey: ["student-summary", id],
     queryFn: async () => {
-      const response = await fetch(`/api/v1/insights?entityType=student&entityId=${id}&kind=summary&limit=1`);
+      const response = await fetch(`/api/v1/insights?entityType=student&entityId=${id}&kind=summary&limit=1`, {
+        credentials: "include",
+      });
       if (!response.ok) return null;
       const data = await response.json();
       return data.data?.[0] || null;

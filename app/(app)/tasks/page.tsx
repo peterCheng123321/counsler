@@ -48,6 +48,7 @@ export default function TasksPage() {
       const response = await fetch("/api/v1/analysis", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({
           module: "task_efficiency",
         }),

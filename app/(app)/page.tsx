@@ -60,7 +60,9 @@ export default function DashboardPage() {
   const { data: insightsData } = useQuery({
     queryKey: ["insights", "latest"],
     queryFn: async () => {
-      const response = await fetch("/api/v1/insights?limit=5");
+      const response = await fetch("/api/v1/insights?limit=5", {
+        credentials: "include",
+      });
       if (!response.ok) return { data: [] };
       return response.json();
     },
