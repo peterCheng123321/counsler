@@ -4,9 +4,12 @@
  * Run with: npx tsx scripts/seed_demo.ts
  * 
  * Note: Requires dotenv package for standalone execution: npm install -D dotenv
+ * This file is excluded from TypeScript compilation (see tsconfig.json)
  */
 
+// @ts-nocheck
 import { createClient } from "@supabase/supabase-js";
+
 // dotenv is optional - Next.js env vars are available at runtime
 // For standalone script execution, install dotenv: npm install -D dotenv
 // Uncomment the following lines if running as a standalone script:
