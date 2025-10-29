@@ -16,17 +16,21 @@ export default function LoginPage() {
         data: { user },
       } = await supabase.auth.getUser();
       if (user) {
-        router.push("/chatbot");
+        router.push("/");
       }
     };
     checkUser();
   }, [router, supabase]);
 
   const handleGoogleLogin = async () => {
+    // Use window.location.origin for client-side redirect
+    // This will automatically use the correct URL (localhost in dev, production URL in prod)
+    const redirectTo = `${window.location.origin}/auth/callback`;
+    
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "google",
       options: {
-        redirectTo: `${window.location.origin}/auth/callback`,
+        redirectTo,
       },
     });
 
