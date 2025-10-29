@@ -1,14 +1,17 @@
 "use client";
 
-import { useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
 export default function LoginPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const supabase = createClient();
+  const [error, setError] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
     const checkUser = async () => {
@@ -20,18 +23,45 @@ export default function LoginPage() {
       }
     };
     checkUser();
-  }, [router, supabase]);
+
+    // Check for OAuth errors
+    const oauthError = searchParams.get("error");
+    const errorDescription = searchParams.get("error_description");
+    if (oauthError) {
+      setError(errorDescription || oauthError);
+    }
+  }, [router, supabase, searchParams]);
 
   const handleGoogleLogin = async () => {
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: "google",
-      options: {
-        redirectTo: `${window.location.origin}/auth/callback`,
-      },
-    });
+    setIsLoading(true);
+    setError(null);
 
-    if (error) {
-      console.error("Login error:", error);
+    try {
+      // Get the current origin (works for both localhost and production)
+      const origin = typeof window !== 'undefined' ? window.location.origin : '';
+      const redirectTo = `${origin}/auth/callback`;
+
+      const { error: oauthError } = await supabase.auth.signInWithOAuth({
+        provider: "google",
+        options: {
+          redirectTo,
+          queryParams: {
+            access_type: 'offline',
+            prompt: 'consent',
+          },
+        },
+      });
+
+      if (oauthError) {
+        console.error("Login error:", oauthError);
+        setError(oauthError.message || "Failed to initiate Google login");
+        setIsLoading(false);
+      }
+      // If successful, the user will be redirected, so we don't need to handle that case
+    } catch (err) {
+      console.error("Unexpected error:", err);
+      setError(err instanceof Error ? err.message : "An unexpected error occurred");
+      setIsLoading(false);
     }
   };
 
@@ -48,10 +78,17 @@ export default function LoginPage() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
+          {error && (
+            <div className="rounded-lg bg-error-light border border-error p-3 text-sm text-error">
+              {error}
+            </div>
+          )}
           <Button
             onClick={handleGoogleLogin}
             className="w-full"
             size="lg"
+            disabled={isLoading}
+            loading={isLoading}
           >
             <svg
               className="mr-2 h-5 w-5"
@@ -63,11 +100,20 @@ export default function LoginPage() {
               <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05" />
               <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335" />
             </svg>
-            Continue with Google
+            {isLoading ? "Connecting..." : "Continue with Google"}
           </Button>
           <p className="text-center text-sm text-text-tertiary">
             By continuing, you agree to our Terms of Service and Privacy Policy
           </p>
+          <div className="mt-4 rounded-lg bg-text-tertiary/10 p-3 text-xs text-text-secondary">
+            <p className="font-semibold mb-1">Setup Required:</p>
+            <p>Make sure Google OAuth is configured in your Supabase dashboard:</p>
+            <ol className="list-decimal list-inside mt-2 space-y-1">
+              <li>Go to Supabase Dashboard → Authentication → Providers</li>
+              <li>Enable Google provider</li>
+              <li>Add authorized redirect URL: <code className="bg-background px-1 rounded">{typeof window !== 'undefined' ? window.location.origin : ''}/auth/callback</code></li>
+            </ol>
+          </div>
         </CardContent>
       </Card>
     </div>
