@@ -5,7 +5,8 @@ import { type NextRequest } from "next/server";
 export async function GET(request: NextRequest) {
   const requestUrl = new URL(request.url);
   const code = requestUrl.searchParams.get("code");
-  const next = requestUrl.searchParams.get("next") || "/chatbot";
+  // Check for both 'next' and 'redirect' parameters (redirect is from middleware)
+  const redirectParam = requestUrl.searchParams.get("redirect") || requestUrl.searchParams.get("next") || "/chatbot";
   const error = requestUrl.searchParams.get("error");
   const errorDescription = requestUrl.searchParams.get("error_description");
 
@@ -13,7 +14,7 @@ export async function GET(request: NextRequest) {
     code: code ? "present" : "missing",
     error,
     errorDescription,
-    next,
+    redirect: redirectParam,
     origin: requestUrl.origin,
   });
 
@@ -56,10 +57,10 @@ export async function GET(request: NextRequest) {
       return NextResponse.redirect(url);
     }
 
-    console.log("OAuth success - redirecting to:", next);
+    console.log("OAuth success - redirecting to:", redirectParam);
     
     // Use absolute URL for redirect to ensure it works correctly
-    const redirectUrl = new URL(next, requestUrl.origin);
+    const redirectUrl = new URL(redirectParam, requestUrl.origin);
     const response = NextResponse.redirect(redirectUrl);
     
     // Ensure cookies are set properly

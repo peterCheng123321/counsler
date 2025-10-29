@@ -46,7 +46,9 @@ function LoginForm() {
         throw new Error("Unable to determine site URL");
       }
       
-      const redirectTo = `${origin}/auth/callback`;
+      // Get redirect parameter from URL if present
+      const redirectParam = searchParams.get("redirect") || "/chatbot";
+      const redirectTo = `${origin}/auth/callback?redirect=${encodeURIComponent(redirectParam)}`;
       
       console.log("OAuth redirect URL:", redirectTo); // Debug log
 
