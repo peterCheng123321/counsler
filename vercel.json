@@ -1,0 +1,33 @@
+{
+  "buildCommand": "npm run build",
+  "devCommand": "npm run dev",
+  "installCommand": "npm install",
+  "framework": "nextjs",
+  "regions": ["iad1"],
+  "env": {
+    "NEXT_PUBLIC_SUPABASE_URL": "@supabase_url",
+    "NEXT_PUBLIC_SUPABASE_ANON_KEY": "@supabase_anon_key",
+    "SUPABASE_SERVICE_ROLE_KEY": "@supabase_service_role_key",
+    "OPENAI_API_KEY": "@openai_api_key",
+    "OPENAI_ASSISTANT_ID": "@openai_assistant_id",
+    "AZURE_OPENAI_ENDPOINT": "@azure_openai_endpoint",
+    "AZURE_OPENAI_API_KEY": "@azure_openai_api_key",
+    "AZURE_OPENAI_API_VERSION": "@azure_openai_api_version",
+    "AZURE_OPENAI_DEPLOYMENT_NAME": "@azure_openai_deployment_name",
+    "GEMINI_API_KEY": "@gemini_api_key",
+    "PINECONE_API_KEY": "@pinecone_api_key",
+    "PINECONE_ENVIRONMENT": "@pinecone_environment",
+    "PINECONE_INDEX_NAME": "@pinecone_index_name"
+  },
+  "crons": [
+    {
+      "path": "/api/cron/reminders",
+      "schedule": "0 9 * * *"
+    },
+    {
+      "path": "/api/cron/progress-recalc",
+      "schedule": "0 2 * * *"
+    }
+  ]
+}
+
