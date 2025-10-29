@@ -58,25 +58,6 @@ function LoginForm() {
             access_type: 'offline',
             prompt: 'consent',
           },
-        },
-      });
-
-      if (oauthError) {
-        console.error("Login error:", oauthError);
-        setError(oauthError.message || "Failed to initiate Google login");
-        setIsLoading(false);
-      } else if (data?.url) {
-        // Log the URL that Supabase is redirecting to (for debugging)
-        console.log("Supabase redirect URL:", data.url);
-      }
-      const { error: oauthError, data } = await supabase.auth.signInWithOAuth({
-        provider: "google",
-        options: {
-          redirectTo,
-          queryParams: {
-            access_type: 'offline',
-            prompt: 'consent',
-          },
           skipBrowserRedirect: false,
         },
       });
