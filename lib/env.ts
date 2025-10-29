@@ -28,6 +28,11 @@ const requiredEnvVars = {
   PINECONE_INDEX_NAME: process.env.PINECONE_INDEX_NAME,
 } as const;
 
+// Demo mode flags (optional)
+export const DEMO_MODE = process.env.DEMO_MODE === "true";
+export const DEMO_PUBLIC_READ = process.env.DEMO_PUBLIC_READ === "true";
+export const DEMO_WORKSPACE_ID = process.env.DEMO_WORKSPACE_ID || "00000000-0000-0000-0000-000000000000";
+
 export function validateEnv() {
   const missing: string[] = [];
 
