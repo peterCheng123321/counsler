@@ -72,6 +72,7 @@ export function AddTaskModal({ open, onOpenChange }: AddTaskModalProps) {
     defaultValues: {
       priority: "medium",
       dueDate: new Date().toISOString().split("T")[0],
+      studentId: "none",
     },
   });
 
