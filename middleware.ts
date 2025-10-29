@@ -48,6 +48,11 @@ export async function middleware(request: NextRequest) {
     }
   );
 
+  // Don't intercept auth callback route
+  if (request.nextUrl.pathname === "/auth/callback") {
+    return supabaseResponse;
+  }
+
   // Refresh session if expired
   const {
     data: { user },

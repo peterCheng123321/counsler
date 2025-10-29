@@ -69,7 +69,32 @@ function LoginForm() {
         // Log the URL that Supabase is redirecting to (for debugging)
         console.log("Supabase redirect URL:", data.url);
       }
-      // If successful, the user will be redirected, so we don't need to handle that case
+      const { error: oauthError, data } = await supabase.auth.signInWithOAuth({
+        provider: "google",
+        options: {
+          redirectTo,
+          queryParams: {
+            access_type: 'offline',
+            prompt: 'consent',
+          },
+          skipBrowserRedirect: false,
+        },
+      });
+
+      if (oauthError) {
+        console.error("Login error:", oauthError);
+        setError(oauthError.message || "Failed to initiate Google login");
+        setIsLoading(false);
+      } else if (data?.url) {
+        // Log the URL that Supabase is redirecting to (for debugging)
+        console.log("Supabase redirect URL:", data.url);
+        // Automatically redirect to Google OAuth
+        window.location.href = data.url;
+      } else {
+        console.error("No redirect URL received from Supabase");
+        setError("Failed to get OAuth redirect URL");
+        setIsLoading(false);
+      }
     } catch (err) {
       console.error("Unexpected error:", err);
       setError(err instanceof Error ? err.message : "An unexpected error occurred");
