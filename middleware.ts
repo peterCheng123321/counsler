@@ -54,10 +54,17 @@ export async function middleware(request: NextRequest) {
   } = await supabase.auth.getUser();
 
   // Protect routes that require authentication
-  const protectedPaths = ["/chatbot", "/students", "/tasks"];
+  const protectedPaths = ["/chatbot", "/students", "/tasks", "/"];
   const isProtectedPath = protectedPaths.some((path) =>
-    request.nextUrl.pathname.startsWith(path)
+    request.nextUrl.pathname === path || request.nextUrl.pathname.startsWith(path + "/")
   );
+  
+  // Handle root path specifically
+  if (request.nextUrl.pathname === "/" && !user) {
+    const url = request.nextUrl.clone();
+    url.pathname = "/auth/login";
+    return NextResponse.redirect(url);
+  }
 
   if (!user && isProtectedPath) {
     const url = request.nextUrl.clone();
