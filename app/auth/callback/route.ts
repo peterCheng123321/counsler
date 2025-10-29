@@ -12,8 +12,7 @@ export async function GET(request: NextRequest) {
   // Handle OAuth errors
   if (error) {
     console.error("OAuth error:", error, errorDescription);
-    const url = requestUrl.clone();
-    url.pathname = "/auth/login";
+    const url = new URL("/auth/login", requestUrl.origin);
     url.searchParams.set("error", error);
     if (errorDescription) {
       url.searchParams.set("error_description", errorDescription);
@@ -27,16 +26,14 @@ export async function GET(request: NextRequest) {
     
     if (exchangeError) {
       console.error("Session exchange error:", exchangeError);
-      const url = requestUrl.clone();
-      url.pathname = "/auth/login";
+      const url = new URL("/auth/login", requestUrl.origin);
       url.searchParams.set("error", "session_exchange_failed");
       url.searchParams.set("error_description", exchangeError.message);
       return NextResponse.redirect(url);
     }
   } else {
     console.error("No authorization code received");
-    const url = requestUrl.clone();
-    url.pathname = "/auth/login";
+    const url = new URL("/auth/login", requestUrl.origin);
     url.searchParams.set("error", "no_code");
     return NextResponse.redirect(url);
   }
