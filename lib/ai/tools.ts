@@ -15,6 +15,11 @@ import {
 } from "@/lib/analysis";
 import { createInsight } from "@/lib/insights";
 import { aiServiceManager } from "@/lib/ai";
+import { analyzeEssay } from "@/lib/intelligence/essay-analyzer";
+import { findCollegeMatches, generateBalancedCollegeList } from "@/lib/intelligence/college-matcher";
+import { generateApplicationTimeline, createTimelineTasks } from "@/lib/intelligence/timeline-generator";
+import { scoreStudentActivities } from "@/lib/intelligence/activity-scorer";
+import { generateStrengthScorecard } from "@/lib/intelligence/strength-scorecard";
 
 export const aiTools: AITool[] = [
   {
@@ -433,6 +438,105 @@ export const aiTools: AITool[] = [
           },
         },
         required: ["module"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "analyze_essay",
+      description: "Analyze a college essay for quality, effectiveness, clichés, and writing strength. Provides detailed scoring and actionable feedback.",
+      parameters: {
+        type: "object",
+        properties: {
+          essayContent: {
+            type: "string",
+            description: "The essay text to analyze (minimum 50 characters)",
+          },
+        },
+        required: ["essayContent"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "recommend_colleges",
+      description: "Get intelligent college recommendations for a student based on their academic profile, test scores, and preferences. Returns match scores and admission probabilities.",
+      parameters: {
+        type: "object",
+        properties: {
+          studentId: {
+            type: "string",
+            description: "The UUID of the student",
+          },
+          limit: {
+            type: "number",
+            description: "Number of colleges to recommend (default: 20)",
+            default: 20,
+          },
+        },
+        required: ["studentId"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "generate_application_timeline",
+      description: "Generate a personalized application timeline with tasks, deadlines, and milestones based on student's college list and current progress.",
+      parameters: {
+        type: "object",
+        properties: {
+          studentId: {
+            type: "string",
+            description: "The UUID of the student",
+          },
+          autoCreateTasks: {
+            type: "boolean",
+            description: "Whether to automatically create tasks in the database (default: false)",
+            default: false,
+          },
+        },
+        required: ["studentId"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "score_activities",
+      description: "Score and evaluate a student's extracurricular activities for leadership, impact, uniqueness, and admissions value.",
+      parameters: {
+        type: "object",
+        properties: {
+          studentId: {
+            type: "string",
+            description: "The UUID of the student",
+          },
+          intendedMajor: {
+            type: "string",
+            description: "Student's intended major to assess activity relevance (optional)",
+          },
+        },
+        required: ["studentId"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "generate_strength_scorecard",
+      description: "Generate comprehensive application strength scorecard evaluating academics, extracurriculars, essays, and recommendations. Provides overall competitiveness rating.",
+      parameters: {
+        type: "object",
+        properties: {
+          studentId: {
+            type: "string",
+            description: "The UUID of the student",
+          },
+        },
+        required: ["studentId"],
       },
     },
   },
@@ -1264,6 +1368,120 @@ Provide a concise 2-3 paragraph summary highlighting key achievements, applicati
         name: toolCall.name,
         result,
       };
+    }
+
+    case "analyze_essay": {
+      if (!args.essayContent) {
+        throw new Error("essayContent is required");
+      }
+
+      try {
+        const analysis = await analyzeEssay(args.essayContent);
+
+        return {
+          toolCallId: toolCall.id,
+          name: toolCall.name,
+          result: analysis,
+        };
+      } catch (error) {
+        throw new Error(
+          `Failed to analyze essay: ${error instanceof Error ? error.message : "Unknown error"}`
+        );
+      }
+    }
+
+    case "recommend_colleges": {
+      if (!args.studentId) {
+        throw new Error("studentId is required");
+      }
+
+      try {
+        const matches = await findCollegeMatches(args.studentId, args.limit || 20);
+
+        return {
+          toolCallId: toolCall.id,
+          name: toolCall.name,
+          result: {
+            matches,
+            count: matches.length,
+          },
+        };
+      } catch (error) {
+        throw new Error(
+          `Failed to recommend colleges: ${error instanceof Error ? error.message : "Unknown error"}`
+        );
+      }
+    }
+
+    case "generate_application_timeline": {
+      if (!args.studentId) {
+        throw new Error("studentId is required");
+      }
+
+      try {
+        const timeline = await generateApplicationTimeline(args.studentId);
+
+        let taskCreationResult = null;
+        if (args.autoCreateTasks) {
+          taskCreationResult = await createTimelineTasks(args.studentId, timeline);
+        }
+
+        return {
+          toolCallId: toolCall.id,
+          name: toolCall.name,
+          result: {
+            timeline,
+            taskCreation: taskCreationResult,
+          },
+        };
+      } catch (error) {
+        throw new Error(
+          `Failed to generate timeline: ${error instanceof Error ? error.message : "Unknown error"}`
+        );
+      }
+    }
+
+    case "score_activities": {
+      if (!args.studentId) {
+        throw new Error("studentId is required");
+      }
+
+      try {
+        const activityScores = await scoreStudentActivities(
+          args.studentId,
+          args.intendedMajor
+        );
+
+        return {
+          toolCallId: toolCall.id,
+          name: toolCall.name,
+          result: activityScores,
+        };
+      } catch (error) {
+        throw new Error(
+          `Failed to score activities: ${error instanceof Error ? error.message : "Unknown error"}`
+        );
+      }
+    }
+
+    case "generate_strength_scorecard": {
+      if (!args.studentId) {
+        throw new Error("studentId is required");
+      }
+
+      try {
+        const scorecard = await generateStrengthScorecard(args.studentId);
+
+        return {
+          toolCallId: toolCall.id,
+          name: toolCall.name,
+          result: scorecard,
+        };
+      } catch (error) {
+        throw new Error(
+          `Failed to generate scorecard: ${error instanceof Error ? error.message : "Unknown error"}`
+        );
+      }
     }
 
     case "generate_lor": {

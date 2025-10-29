@@ -111,24 +111,23 @@ export async function POST(request: NextRequest) {
       console.error("Failed to save user message:", userMsgError);
     }
 
-    // Get conversation history (limited to last N messages)
-    const { data: allHistory, error: historyError } = await supabase
+    // Get conversation history (optimized: fetch only last N messages)
+    const { data: limitedHistory, error: historyError } = await supabase
       .from("messages")
       .select("role, content, tool_calls, tool_call_id")
       .eq("conversation_id", convId)
-      .order("created_at", { ascending: true });
+      .order("created_at", { ascending: false })
+      .limit(HISTORY_LIMIT);
 
     if (historyError) {
       console.error("Failed to fetch history:", historyError);
     }
 
-    // Limit history to last N messages (keep system context)
-    const limitedHistory = allHistory
-      ? allHistory.slice(-HISTORY_LIMIT)
-      : [];
+    // Reverse to get chronological order
+    const orderedHistory = limitedHistory ? limitedHistory.reverse() : [];
 
     // Build messages for AI
-    const aiMessages: AIMessage[] = limitedHistory.map((msg) => ({
+    const aiMessages: AIMessage[] = orderedHistory.map((msg) => ({
       role: msg.role as "user" | "assistant" | "system",
       content: msg.content,
       tool_calls: msg.tool_calls as AIToolCall[] | undefined,
