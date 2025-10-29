@@ -2,12 +2,15 @@
  * Demo Data Seeding Script
  * Generates realistic mock data for demonstration purposes
  * Run with: npx tsx scripts/seed_demo.ts
+ * 
+ * Note: Requires dotenv package: npm install -D dotenv
  */
 
 import { createClient } from "@supabase/supabase-js";
-import { config } from "dotenv";
-
-config();
+// dotenv is optional - Next.js env vars are available at runtime
+// For standalone script execution, install dotenv: npm install -D dotenv
+// import { config } from "dotenv";
+// config();
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
