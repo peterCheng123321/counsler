@@ -17,6 +17,7 @@ import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 
 const navItems = [
+  { href: "/dashboard", label: "Dashboard", icon: Search },
   { href: "/chatbot", label: "Chatbot", icon: MessageCircle },
   { href: "/students", label: "Students", icon: Users },
   { href: "/tasks", label: "Tasks", icon: CheckSquare },
@@ -29,7 +30,7 @@ export function Header() {
     <header className="sticky top-0 z-50 w-full border-b border-border bg-surface/95 backdrop-blur supports-[backdrop-filter]:bg-surface/60">
       <div className="container flex h-16 items-center justify-between px-4">
         {/* Logo */}
-        <Link href="/chatbot" className="flex items-center space-x-2">
+        <Link href="/dashboard" className="flex items-center space-x-2">
           <div className="flex h-8 w-8 items-center justify-center rounded-md bg-primary text-white font-bold">
             C
           </div>
