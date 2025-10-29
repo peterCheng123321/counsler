@@ -3,12 +3,13 @@
  * Generates realistic mock data for demonstration purposes
  * Run with: npx tsx scripts/seed_demo.ts
  * 
- * Note: Requires dotenv package: npm install -D dotenv
+ * Note: Requires dotenv package for standalone execution: npm install -D dotenv
  */
 
 import { createClient } from "@supabase/supabase-js";
 // dotenv is optional - Next.js env vars are available at runtime
 // For standalone script execution, install dotenv: npm install -D dotenv
+// Uncomment the following lines if running as a standalone script:
 // import { config } from "dotenv";
 // config();
 
