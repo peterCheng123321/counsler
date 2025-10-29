@@ -540,6 +540,63 @@ export const aiTools: AITool[] = [
       },
     },
   },
+  {
+    type: "function",
+    function: {
+      name: "semantic_search",
+      description: "AI-powered semantic search across students, essays, and activities. Use natural language to find relevant content by meaning, not just keywords. Example: 'students interested in computer science' or 'essays about overcoming challenges'.",
+      parameters: {
+        type: "object",
+        properties: {
+          query: {
+            type: "string",
+            description: "Natural language search query",
+          },
+          searchTypes: {
+            type: "array",
+            items: {
+              type: "string",
+              enum: ["students", "essays", "activities"],
+            },
+            description: "Types of content to search (default: all)",
+          },
+          limit: {
+            type: "number",
+            description: "Maximum number of results per type (default: 5)",
+            default: 5,
+          },
+        },
+        required: ["query"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "find_similar_content",
+      description: "Find content similar to a given essay or student profile. Useful for finding examples, templates, or comparable cases.",
+      parameters: {
+        type: "object",
+        properties: {
+          entityType: {
+            type: "string",
+            enum: ["essay", "student"],
+            description: "Type of entity to find similar matches for",
+          },
+          entityId: {
+            type: "string",
+            description: "UUID of the essay or student",
+          },
+          limit: {
+            type: "number",
+            description: "Number of similar items to return (default: 5)",
+            default: 5,
+          },
+        },
+        required: ["entityType", "entityId"],
+      },
+    },
+  },
 ];
 
 // Add demo-only tools if DEMO_MODE is enabled
@@ -1480,6 +1537,78 @@ Provide a concise 2-3 paragraph summary highlighting key achievements, applicati
       } catch (error) {
         throw new Error(
           `Failed to generate scorecard: ${error instanceof Error ? error.message : "Unknown error"}`
+        );
+      }
+    }
+
+    case "semantic_search": {
+      if (!args.query) {
+        throw new Error("query is required");
+      }
+
+      try {
+        const searchResults = await smartSearch(args.query, {
+          limit: args.limit || 5,
+          threshold: 0.65,
+          includeMetadata: true,
+        });
+
+        return {
+          toolCallId: toolCall.id,
+          name: toolCall.name,
+          result: {
+            interpretation: searchResults.interpretation,
+            students: searchResults.results.students,
+            essays: searchResults.results.essays,
+            activities: searchResults.results.activities,
+            suggestions: searchResults.suggestions,
+            totalResults:
+              searchResults.results.students.length +
+              searchResults.results.essays.length +
+              searchResults.results.activities.length,
+          },
+        };
+      } catch (error) {
+        throw new Error(
+          `Failed to execute semantic search: ${error instanceof Error ? error.message : "Unknown error"}`
+        );
+      }
+    }
+
+    case "find_similar_content": {
+      if (!args.entityType || !args.entityId) {
+        throw new Error("entityType and entityId are required");
+      }
+
+      try {
+        let similarContent;
+
+        if (args.entityType === "essay") {
+          similarContent = await findSimilarEssays(args.entityId, {
+            limit: args.limit || 5,
+            threshold: 0.75,
+          });
+        } else if (args.entityType === "student") {
+          similarContent = await findSimilarStudents(args.entityId, {
+            limit: args.limit || 5,
+            threshold: 0.7,
+          });
+        } else {
+          throw new Error(`Unknown entity type: ${args.entityType}`);
+        }
+
+        return {
+          toolCallId: toolCall.id,
+          name: toolCall.name,
+          result: {
+            entityType: args.entityType,
+            similarItems: similarContent,
+            count: similarContent.length,
+          },
+        };
+      } catch (error) {
+        throw new Error(
+          `Failed to find similar content: ${error instanceof Error ? error.message : "Unknown error"}`
         );
       }
     }

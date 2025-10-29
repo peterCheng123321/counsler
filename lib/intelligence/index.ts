@@ -7,3 +7,4 @@ export * from "./college-matcher";
 export * from "./timeline-generator";
 export * from "./activity-scorer";
 export * from "./strength-scorecard";
+export * from "./semantic-search";
