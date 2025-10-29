@@ -288,7 +288,7 @@ export async function executeTool(
       }
 
       // Extract unique students (a student might have multiple colleges with same app type)
-      const studentMap = new Map();
+      const studentMap = new Map<string, any>();
       if (data) {
         for (const item of data) {
           if (item.students && Array.isArray(item.students) && item.students.length > 0) {
@@ -298,9 +298,9 @@ export async function executeTool(
               studentMap.set(studentId, student);
             }
           } else if (item.students && typeof item.students === 'object' && !Array.isArray(item.students)) {
-            const student = item.students;
+            const student = item.students as any;
             const studentId = student.id;
-            if (!studentMap.has(studentId)) {
+            if (studentId && !studentMap.has(studentId)) {
               studentMap.set(studentId, student);
             }
           }
