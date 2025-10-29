@@ -249,7 +249,7 @@ export default function ChatbotPage() {
   };
 
   return (
-    <div className="flex h-[calc(100vh-6rem)] gap-3 overflow-hidden">
+    <div className="flex h-[calc(100vh-4rem)] sm:h-[calc(100vh-5rem)] md:h-[calc(100vh-6rem)] gap-2 sm:gap-3 md:gap-4 lg:gap-6 overflow-hidden">
       {/* Chat History Sidebar */}
       <ChatHistory
         selectedConversation={selectedConversation}
@@ -260,17 +260,17 @@ export default function ChatbotPage() {
       {/* Chat Area */}
       <div className="flex flex-1 flex-col min-w-0">
         {/* Messages Area */}
-        <div className="flex-1 overflow-y-auto p-4 md:p-6 lg:p-8">
-          <div className="mx-auto max-w-4xl space-y-4">
+        <div className="flex-1 overflow-y-auto p-3 sm:p-4 md:p-6 lg:p-8 xl:p-10" style={{ paddingTop: 'clamp(0.75rem, 2vw, 2.5rem)', paddingBottom: 'clamp(0.75rem, 2vw, 2.5rem)' }}>
+          <div className="mx-auto max-w-4xl space-y-3 sm:space-y-4 md:space-y-5 lg:space-y-6">
             {messages.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-8 md:py-12">
-                <div className="mb-6 rounded-full bg-gradient-to-br from-primary/20 to-primary/10 p-5 backdrop-blur-sm animate-pulse">
-                  <Sparkles className="h-8 w-8 text-primary" />
+              <div className="flex flex-col items-center justify-center" style={{ paddingTop: 'clamp(2rem, 8vh, 6rem)', paddingBottom: 'clamp(2rem, 8vh, 6rem)' }}>
+                <div className="mb-4 sm:mb-5 md:mb-6 lg:mb-8 rounded-full bg-gradient-to-br from-primary/20 to-primary/10 backdrop-blur-sm animate-pulse" style={{ padding: 'clamp(0.75rem, 2vw, 1.5rem)' }}>
+                  <Sparkles className="text-primary" style={{ width: 'clamp(1.5rem, 4vw, 2.5rem)', height: 'clamp(1.5rem, 4vw, 2.5rem)' }} />
                 </div>
-                <h2 className="text-2xl md:text-3xl font-bold mb-2 text-heading-1">
+                <h2 className="text-xl sm:text-2xl md:text-3xl lg:text-4xl font-bold mb-1 sm:mb-2 md:mb-3 text-heading-1">
                   How can I help you today?
                 </h2>
-                <p className="text-sm md:text-base text-text-secondary mb-6 text-center max-w-lg">
+                <p className="text-xs sm:text-sm md:text-base lg:text-lg text-text-secondary mb-4 sm:mb-5 md:mb-6 lg:mb-8 text-center max-w-xs sm:max-w-sm md:max-w-lg lg:max-w-xl" style={{ marginBottom: 'clamp(1rem, 3vh, 2rem)' }}>
                   Ask me about students, deadlines, or generate a Letter of Recommendation.
                 </p>
                 <SuggestionChips
@@ -300,11 +300,11 @@ export default function ChatbotPage() {
         </div>
 
         {/* Input Area */}
-        <div className="border-t border-border/50 bg-gradient-to-t from-background via-background/95 to-background/80 p-4 md:p-5 backdrop-blur-xl shadow-[0_-4px_24px_rgba(0,0,0,0.04)]">
+        <div className="border-t border-border/50 bg-gradient-to-t from-background via-background/95 to-background/80 backdrop-blur-xl shadow-[0_-4px_24px_rgba(0,0,0,0.04)]" style={{ padding: 'clamp(0.75rem, 2vw, 1.5rem)' }}>
           <div className="mx-auto max-w-4xl">
-            <div className="flex items-end gap-3 rounded-xl border-2 border-border/50 bg-surface/80 backdrop-blur-sm p-2.5 shadow-lg transition-all duration-200 hover:shadow-xl focus-within:border-primary focus-within:shadow-2xl focus-within:shadow-primary/10">
+            <div className="flex items-end gap-2 sm:gap-3 md:gap-4 rounded-xl border-2 border-border/50 bg-surface/80 backdrop-blur-sm shadow-lg transition-all duration-200 hover:shadow-xl focus-within:border-primary focus-within:shadow-2xl focus-within:shadow-primary/10" style={{ padding: 'clamp(0.5rem, 1.5vw, 1rem)' }}>
               <Button variant="ghost" size="icon" className="shrink-0 hover:bg-primary/10 transition-colors">
-                <Paperclip className="h-5 w-5 text-text-secondary" />
+                <Paperclip className="h-4 w-4 sm:h-5 sm:w-5 text-text-secondary" />
               </Button>
               <textarea
                 ref={textareaRef}
@@ -312,22 +312,27 @@ export default function ChatbotPage() {
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={handleKeyDown}
                 placeholder="Ask me anything about students, deadlines, or applications..."
-                className="flex-1 resize-none border-0 bg-transparent p-2 text-sm md:text-base outline-none placeholder:text-text-tertiary/60 focus:placeholder:text-text-tertiary/40 transition-colors"
+                className="flex-1 resize-none border-0 bg-transparent outline-none placeholder:text-text-tertiary/60 focus:placeholder:text-text-tertiary/40 transition-colors"
+                style={{ 
+                  padding: 'clamp(0.5rem, 1vw, 0.75rem)',
+                  fontSize: 'clamp(0.875rem, 1.5vw, 1rem)',
+                  maxHeight: "200px"
+                }}
                 rows={1}
-                style={{ maxHeight: "200px" }}
               />
               <Button
                 onClick={(e) => handleSend(e)}
                 disabled={!input.trim() || isTyping}
                 size="icon"
-                className="shrink-0 h-10 w-10 rounded-xl bg-primary hover:bg-primary-hover shadow-md hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                className="shrink-0 rounded-xl bg-primary hover:bg-primary-hover shadow-md hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                style={{ width: 'clamp(2.25rem, 5vw, 2.5rem)', height: 'clamp(2.25rem, 5vw, 2.5rem)' }}
                 loading={isTyping}
               >
-                {!isTyping && <Send className="h-5 w-5" />}
+                {!isTyping && <Send className="h-4 w-4 sm:h-5 sm:w-5" />}
               </Button>
             </div>
             {messages.length > 0 && !isTyping && (
-              <div className="mt-3">
+              <div className="mt-2 sm:mt-3 md:mt-4" style={{ marginTop: 'clamp(0.5rem, 1.5vw, 1rem)' }}>
                 <SuggestionChips
                   suggestions={welcomeSuggestions.slice(0, 3)}
                   onSuggestionClick={handleSuggestionClick}
