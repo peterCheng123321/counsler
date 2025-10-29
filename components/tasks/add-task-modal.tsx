@@ -33,7 +33,7 @@ const taskFormSchema = z.object({
   dueDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Invalid date format"),
   dueTime: z.string().regex(/^\d{2}:\d{2}$/).optional().or(z.literal("")),
   priority: z.enum(["low", "medium", "high"]).default("medium"),
-  studentId: z.string().uuid().optional().or(z.literal("")),
+  studentId: z.string().uuid().optional().or(z.literal("none")),
   reminder1day: z.boolean().default(false),
   reminder1hour: z.boolean().default(false),
   reminder15min: z.boolean().default(false),
@@ -104,7 +104,7 @@ export function AddTaskModal({ open, onOpenChange }: AddTaskModalProps) {
     mutation.mutate({
       ...data,
       dueTime: data.dueTime || undefined,
-      studentId: data.studentId || undefined,
+      studentId: data.studentId && data.studentId !== "none" ? data.studentId : undefined,
     });
   };
 
@@ -186,16 +186,16 @@ export function AddTaskModal({ open, onOpenChange }: AddTaskModalProps) {
             <div className="space-y-2">
               <Label htmlFor="studentId">Student (Optional)</Label>
               <Select
-                value={watch("studentId") || ""}
+                value={watch("studentId") || "none"}
                 onValueChange={(value) =>
-                  setValue("studentId", value || undefined)
+                  setValue("studentId", value === "none" ? undefined : value)
                 }
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Select student" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">No student</SelectItem>
+                  <SelectItem value="none">No student</SelectItem>
                   {students.map((student: Student) => (
                     <SelectItem key={student.id} value={student.id}>
                       {student.first_name} {student.last_name}
