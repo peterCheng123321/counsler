@@ -71,6 +71,9 @@ export function EssayEditor({
 
     setIsAnalyzing(true);
     try {
+      console.log("Fetching suggestions for prompt type:", promptType);
+      console.log("Essay content length:", content.length);
+
       const response = await fetch(`/api/v1/essays/${essayId}/suggestions`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -80,17 +83,30 @@ export function EssayEditor({
         }),
       });
 
-      const result = await response.json();
+      console.log("Response status:", response.status);
+      console.log("Response ok:", response.ok);
 
-      if (result.success) {
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error("Response error:", errorText);
+        toast.error(`Failed to analyze essay: ${response.status}`);
+        return;
+      }
+
+      const result = await response.json();
+      console.log("Received result:", result);
+
+      if (result.success && result.data) {
+        console.log("Setting analysis data:", result.data);
         setAnalysis(result.data);
         toast.success("Analysis complete!");
       } else {
+        console.error("Result not successful:", result);
         toast.error(result.error || "Failed to analyze essay");
       }
     } catch (error) {
       console.error("Error getting suggestions:", error);
-      toast.error("Failed to get suggestions");
+      toast.error(`Failed to get suggestions: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
       setIsAnalyzing(false);
     }
@@ -125,79 +141,60 @@ export function EssayEditor({
 
   const wordCount = content.trim().split(/\s+/).filter(Boolean).length;
 
+  const [showSuggestions, setShowSuggestions] = useState(false);
+
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-      {/* Essay Editor */}
+    <div className="relative min-h-screen">
+      {/* Main Editor */}
       <div className="space-y-4">
-        <Card>
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <CardTitle>Essay Content</CardTitle>
-              <div className="flex items-center gap-2">
-                {hasUnsavedChanges && (
-                  <Badge variant="outline" className="text-amber-600 border-amber-300">
-                    Unsaved changes
-                  </Badge>
-                )}
-                <Badge variant="outline">{wordCount} words</Badge>
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-4">
+        {/* Header Bar */}
+        <div className="flex items-center justify-between bg-white border border-border rounded-lg p-4 shadow-sm">
+          <div className="flex items-center gap-4">
             <div>
-              <label className="text-sm font-medium text-text-primary mb-2 block">
-                Essay Title
-              </label>
               <input
                 type="text"
                 value={title}
                 onChange={(e) => handleTitleChange(e.target.value)}
-                placeholder="Enter essay title..."
-                className="w-full px-3 py-2 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-text-primary"
+                placeholder="Essay Title..."
+                className="text-2xl font-bold border-none outline-none focus:ring-0 bg-transparent w-full"
               />
             </div>
+          </div>
 
-            <div>
-              <label className="text-sm font-medium text-text-primary mb-2 block">
-                Essay Content
-              </label>
-              <Textarea
-                value={content}
-                onChange={(e) => handleContentChange(e.target.value)}
-                placeholder="Write your essay here..."
-                className="min-h-[400px] font-serif text-base leading-relaxed"
-              />
-            </div>
+          <div className="flex items-center gap-3">
+            {hasUnsavedChanges && (
+              <Badge variant="outline" className="text-amber-600 border-amber-300">
+                Unsaved changes
+              </Badge>
+            )}
+            <Badge variant="outline">{wordCount} words</Badge>
+            <Button
+              onClick={handleSave}
+              disabled={isSaving || !hasUnsavedChanges}
+              className="gap-2"
+              size="sm"
+            >
+              {isSaving ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Save className="h-4 w-4" />
+              )}
+              Save
+            </Button>
+          </div>
+        </div>
 
-            <div className="flex gap-2 flex-wrap">
-              <Button
-                onClick={handleSave}
-                disabled={isSaving || !hasUnsavedChanges}
-                className="gap-2"
-              >
-                {isSaving ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Save className="h-4 w-4" />
-                )}
-                Save Essay
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Quick Actions */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
+        {/* AI Analysis Actions */}
+        <div className="bg-white border border-border rounded-lg p-4 shadow-sm">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
               <Sparkles className="h-5 w-5 text-primary" />
-              AI Analysis
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-2 gap-2">
+              <span className="font-semibold">AI Analysis</span>
+            </div>
+            <div className="flex gap-2">
               <Button
                 variant="outline"
+                size="sm"
                 onClick={() => getSuggestions("grammar")}
                 disabled={isAnalyzing}
                 className="gap-2"
@@ -207,6 +204,7 @@ export function EssayEditor({
               </Button>
               <Button
                 variant="outline"
+                size="sm"
                 onClick={() => getSuggestions("structure")}
                 disabled={isAnalyzing}
                 className="gap-2"
@@ -216,6 +214,7 @@ export function EssayEditor({
               </Button>
               <Button
                 variant="outline"
+                size="sm"
                 onClick={() => getSuggestions("content")}
                 disabled={isAnalyzing}
                 className="gap-2"
@@ -225,6 +224,7 @@ export function EssayEditor({
               </Button>
               <Button
                 variant="outline"
+                size="sm"
                 onClick={() => getSuggestions("overall")}
                 disabled={isAnalyzing}
                 className="gap-2"
@@ -233,55 +233,71 @@ export function EssayEditor({
                 Overall
               </Button>
             </div>
+          </div>
+        </div>
+
+        {/* Essay Content Editor */}
+        <Card className="shadow-sm">
+          <CardContent className="p-0">
+            <Textarea
+              value={content}
+              onChange={(e) => handleContentChange(e.target.value)}
+              placeholder="Start writing your essay here..."
+              className="min-h-[calc(100vh-320px)] border-none font-serif text-lg leading-relaxed p-8 resize-none focus-visible:ring-0"
+            />
           </CardContent>
         </Card>
       </div>
 
-      {/* Suggestions Panel */}
-      <div>
-        <Card>
-          <CardHeader>
-            <CardTitle>AI Suggestions</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {!analysis ? (
-              <div className="text-center py-12 text-text-secondary">
-                <Sparkles className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                <p className="mb-2">No analysis yet</p>
-                <p className="text-sm">
-                  Click an analysis button to get AI-powered suggestions
-                </p>
-              </div>
-            ) : (
-              <Tabs defaultValue="suggestions" className="w-full">
-                <TabsList className="grid w-full grid-cols-3">
-                  <TabsTrigger value="suggestions">
-                    Suggestions ({analysis.suggestions.length})
-                  </TabsTrigger>
-                  <TabsTrigger value="strengths">
-                    Strengths ({analysis.strengths.length})
-                  </TabsTrigger>
-                  <TabsTrigger value="improve">
-                    Improve ({analysis.areas_for_improvement.length})
-                  </TabsTrigger>
-                </TabsList>
+      {/* Floating Suggestions Panel */}
+      {analysis && (
+        <div className="fixed top-4 right-4 w-96 max-h-[calc(100vh-2rem)] bg-white border border-border rounded-lg shadow-2xl overflow-hidden z-50 animate-in slide-in-from-right">
+          <div className="bg-primary/5 border-b border-border p-4 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Sparkles className="h-5 w-5 text-primary" />
+              <h3 className="font-semibold text-text-primary">AI Suggestions</h3>
+            </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setAnalysis(null)}
+              className="h-8 w-8 p-0"
+            >
+              ×
+            </Button>
+          </div>
 
-                <TabsContent value="suggestions" className="space-y-3 max-h-[600px] overflow-y-auto">
+          <div className="overflow-y-auto max-h-[calc(100vh-8rem)]">
+            <Tabs defaultValue="suggestions" className="w-full">
+              <TabsList className="grid w-full grid-cols-3 rounded-none border-b">
+                <TabsTrigger value="suggestions" className="rounded-none">
+                  Suggestions ({analysis.suggestions.length})
+                </TabsTrigger>
+                <TabsTrigger value="strengths" className="rounded-none">
+                  Strengths ({analysis.strengths.length})
+                </TabsTrigger>
+                <TabsTrigger value="improve" className="rounded-none">
+                  Improve ({analysis.areas_for_improvement.length})
+                </TabsTrigger>
+              </TabsList>
+
+              <div className="p-4">
+                <TabsContent value="suggestions" className="space-y-3 mt-0">
                   {analysis.suggestions.map((suggestion, index) => {
                     const Icon = categoryIcons[suggestion.category];
                     return (
                       <div
                         key={index}
-                        className="border rounded-lg p-4 space-y-2 bg-surface/50"
+                        className="border rounded-lg p-3 space-y-2 bg-surface/50 hover:bg-surface transition-colors"
                       >
                         <div className="flex items-start justify-between">
                           <div className="flex items-center gap-2">
                             <Icon className="h-4 w-4 text-primary" />
-                            <Badge variant="outline" className="capitalize">
+                            <Badge variant="outline" className="capitalize text-xs">
                               {suggestion.category}
                             </Badge>
                           </div>
-                          <Badge className={severityColors[suggestion.severity]}>
+                          <Badge className={`${severityColors[suggestion.severity]} text-xs`}>
                             {suggestion.severity}
                           </Badge>
                         </div>
@@ -290,7 +306,7 @@ export function EssayEditor({
                           <p className="font-semibold text-text-primary text-sm mb-1">
                             {suggestion.issue}
                           </p>
-                          <p className="text-sm text-text-secondary">
+                          <p className="text-xs text-text-secondary">
                             {suggestion.suggestion}
                           </p>
                           {suggestion.example && (
@@ -304,7 +320,7 @@ export function EssayEditor({
                   })}
                 </TabsContent>
 
-                <TabsContent value="strengths" className="space-y-2 max-h-[600px] overflow-y-auto">
+                <TabsContent value="strengths" className="space-y-2 mt-0">
                   {analysis.strengths.length === 0 ? (
                     <p className="text-text-secondary text-sm text-center py-8">
                       No strengths identified yet
@@ -313,16 +329,16 @@ export function EssayEditor({
                     analysis.strengths.map((strength, index) => (
                       <div
                         key={index}
-                        className="flex items-start gap-3 p-3 bg-green-50 border border-green-200 rounded-lg"
+                        className="flex items-start gap-2 p-3 bg-green-50 border border-green-200 rounded-lg"
                       >
-                        <CheckCircle className="h-5 w-5 text-green-600 mt-0.5 shrink-0" />
-                        <p className="text-sm text-green-800">{strength}</p>
+                        <CheckCircle className="h-4 w-4 text-green-600 mt-0.5 shrink-0" />
+                        <p className="text-xs text-green-800">{strength}</p>
                       </div>
                     ))
                   )}
                 </TabsContent>
 
-                <TabsContent value="improve" className="space-y-2 max-h-[600px] overflow-y-auto">
+                <TabsContent value="improve" className="space-y-2 mt-0">
                   {analysis.areas_for_improvement.length === 0 ? (
                     <p className="text-text-secondary text-sm text-center py-8">
                       No areas for improvement identified yet
@@ -331,30 +347,30 @@ export function EssayEditor({
                     analysis.areas_for_improvement.map((area, index) => (
                       <div
                         key={index}
-                        className="flex items-start gap-3 p-3 bg-amber-50 border border-amber-200 rounded-lg"
+                        className="flex items-start gap-2 p-3 bg-amber-50 border border-amber-200 rounded-lg"
                       >
-                        <Lightbulb className="h-5 w-5 text-amber-600 mt-0.5 shrink-0" />
-                        <p className="text-sm text-amber-800">{area}</p>
+                        <Lightbulb className="h-4 w-4 text-amber-600 mt-0.5 shrink-0" />
+                        <p className="text-xs text-amber-800">{area}</p>
                       </div>
                     ))
                   )}
                 </TabsContent>
-              </Tabs>
-            )}
+              </div>
+            </Tabs>
 
-            {analysis && (
-              <div className="mt-4 p-4 bg-primary/5 rounded-lg border border-primary/20">
-                <p className="text-sm font-semibold text-primary mb-2">
+            {analysis.overall_feedback && (
+              <div className="p-4 border-t bg-primary/5">
+                <p className="text-xs font-semibold text-primary mb-2">
                   Overall Feedback
                 </p>
-                <p className="text-sm text-text-secondary">
+                <p className="text-xs text-text-secondary">
                   {analysis.overall_feedback}
                 </p>
               </div>
             )}
-          </CardContent>
-        </Card>
-      </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
