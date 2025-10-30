@@ -3,10 +3,8 @@
  * Provides AI agent with tool calling support for all AI providers
  */
 
-import { ChatOpenAI } from "@langchain/openai";
-import { AzureChatOpenAI } from "@langchain/openai";
-import { AgentExecutor, createOpenAIFunctionsAgent } from "langchain/agents";
-import { ChatPromptTemplate, MessagesPlaceholder } from "@langchain/core/prompts";
+import { ChatOpenAI, AzureChatOpenAI } from "@langchain/openai";
+import { ChatPromptTemplate } from "@langchain/core/prompts";
 import { BaseMessage, HumanMessage, AIMessage, SystemMessage } from "@langchain/core/messages";
 import { langchainTools } from "./langchain-tools";
 
@@ -43,7 +41,7 @@ export interface LangChainAgentConfig {
  * Create and configure the appropriate LLM based on available environment variables
  */
 function createLLM(config: LangChainAgentConfig = {}) {
-  const { temperature = 0.7, maxTokens = 2000, streaming = true } = config;
+  const { temperature = 0.7, maxTokens = 2000, streaming = false } = config;
 
   // Try Azure OpenAI first
   if (
@@ -57,7 +55,7 @@ function createLLM(config: LangChainAgentConfig = {}) {
       azureOpenAIApiInstanceName: process.env.AZURE_OPENAI_ENDPOINT.replace(
         "https://",
         ""
-      ).replace(".openai.azure.com/", ""),
+      ).replace(".openai.azure.com/", "").replace(".openai.azure.com", ""),
       azureOpenAIApiDeploymentName: process.env.AZURE_OPENAI_DEPLOYMENT_NAME,
       azureOpenAIApiVersion: process.env.AZURE_OPENAI_API_VERSION || "2025-01-01-preview",
       temperature,
@@ -90,8 +88,6 @@ function convertToLangChainMessages(
   messages: Array<{
     role: string;
     content: string;
-    tool_calls?: any[];
-    tool_call_id?: string;
   }>
 ): BaseMessage[] {
   return messages.map((msg) => {
@@ -109,50 +105,19 @@ function convertToLangChainMessages(
 }
 
 /**
- * Create a LangChain agent executor
- */
-export async function createLangChainAgent(config: LangChainAgentConfig = {}) {
-  const llm = createLLM(config);
-
-  // Create prompt template
-  const prompt = ChatPromptTemplate.fromMessages([
-    ["system", SYSTEM_PROMPT],
-    new MessagesPlaceholder("chat_history"),
-    ["human", "{input}"],
-    new MessagesPlaceholder("agent_scratchpad"),
-  ]);
-
-  // Create agent
-  const agent = await createOpenAIFunctionsAgent({
-    llm,
-    tools: langchainTools,
-    prompt,
-  });
-
-  // Create executor
-  const executor = new AgentExecutor({
-    agent,
-    tools: langchainTools,
-    verbose: process.env.NODE_ENV === "development",
-    maxIterations: 5,
-  });
-
-  return executor;
-}
-
-/**
- * Run the LangChain agent with message history
+ * Run the LangChain agent with message history using bind_tools
  */
 export async function runLangChainAgent(
   messages: Array<{
     role: string;
     content: string;
-    tool_calls?: any[];
-    tool_call_id?: string;
   }>,
   config: LangChainAgentConfig = {}
 ) {
-  const executor = await createLangChainAgent(config);
+  const llm = createLLM(config);
+
+  // Bind tools to the LLM
+  const llmWithTools = llm.bindTools(langchainTools);
 
   // Extract the last user message
   const lastMessage = messages[messages.length - 1];
@@ -160,76 +125,85 @@ export async function runLangChainAgent(
     throw new Error("Last message must be from user");
   }
 
-  // Convert message history (excluding the last message)
-  const chatHistory = convertToLangChainMessages(messages.slice(0, -1));
+  // Build message history with system prompt
+  const allMessages = [
+    new SystemMessage(SYSTEM_PROMPT),
+    ...convertToLangChainMessages(messages),
+  ];
 
-  // Run the agent
-  const result = await executor.invoke({
-    input: lastMessage.content,
-    chat_history: chatHistory,
-  });
+  let fullContent = "";
+  let toolCalls: any[] = [];
+  let iterationCount = 0;
+  const maxIterations = 5;
 
-  return {
-    content: result.output,
-    intermediateSteps: result.intermediateSteps,
-  };
-}
+  // Agent loop: invoke LLM, check for tool calls, execute tools, repeat
+  while (iterationCount < maxIterations) {
+    iterationCount++;
 
-/**
- * Stream the LangChain agent response
- */
-export async function* streamLangChainAgent(
-  messages: Array<{
-    role: string;
-    content: string;
-    tool_calls?: any[];
-    tool_call_id?: string;
-  }>,
-  config: LangChainAgentConfig = {}
-) {
-  const executor = await createLangChainAgent({ ...config, streaming: true });
+    console.log(`[LangChain Agent] Iteration ${iterationCount}`);
 
-  // Extract the last user message
-  const lastMessage = messages[messages.length - 1];
-  if (!lastMessage || lastMessage.role !== "user") {
-    throw new Error("Last message must be from user");
-  }
+    // Invoke LLM
+    const response = await llmWithTools.invoke(allMessages);
 
-  // Convert message history (excluding the last message)
-  const chatHistory = convertToLangChainMessages(messages.slice(0, -1));
+    // Check if there are tool calls
+    if (response.tool_calls && response.tool_calls.length > 0) {
+      console.log(`[LangChain Agent] Tool calls detected:`, response.tool_calls.map(tc => tc.name));
 
-  // Stream the agent response
-  const stream = await executor.stream({
-    input: lastMessage.content,
-    chat_history: chatHistory,
-  });
+      // Add assistant message with tool calls to history
+      allMessages.push(response);
 
-  for await (const chunk of stream) {
-    // Handle different types of chunks
-    if (chunk.output) {
-      // Final output
-      yield {
-        type: "content" as const,
-        content: chunk.output,
-      };
-    } else if (chunk.intermediateSteps) {
-      // Tool execution steps
-      for (const step of chunk.intermediateSteps) {
-        yield {
-          type: "tool_call" as const,
-          toolName: step.action?.tool || "unknown",
-          toolInput: step.action?.toolInput || {},
-        };
+      // Execute each tool
+      for (const toolCall of response.tool_calls) {
+        const tool = langchainTools.find(t => t.name === toolCall.name);
 
-        if (step.observation) {
-          yield {
-            type: "tool_result" as const,
-            result: step.observation,
-          };
+        if (tool) {
+          try {
+            console.log(`[LangChain Agent] Executing tool: ${toolCall.name}`);
+            const toolResult = await tool.invoke(toolCall.args);
+
+            // Add tool result to messages
+            allMessages.push({
+              role: "tool",
+              content: toolResult,
+              tool_call_id: toolCall.id,
+            } as any);
+
+            toolCalls.push({
+              name: toolCall.name,
+              args: toolCall.args,
+              result: toolResult,
+            });
+          } catch (error) {
+            console.error(`[LangChain Agent] Tool execution error:`, error);
+            // Add error as tool result
+            allMessages.push({
+              role: "tool",
+              content: JSON.stringify({
+                error: error instanceof Error ? error.message : "Unknown error",
+              }),
+              tool_call_id: toolCall.id,
+            } as any);
+          }
         }
       }
+
+      // Continue the loop to get final response
+      continue;
     }
+
+    // No tool calls - this is the final response
+    fullContent = response.content.toString();
+    break;
   }
+
+  if (iterationCount >= maxIterations) {
+    console.warn(`[LangChain Agent] Max iterations (${maxIterations}) reached`);
+  }
+
+  return {
+    content: fullContent || "I apologize, but I couldn't generate a response. Please try again.",
+    intermediateSteps: toolCalls,
+  };
 }
 
 /**
@@ -242,22 +216,12 @@ export async function langChainChat(
 ) {
   const llm = createLLM({ ...config, streaming: false });
 
-  const prompt = ChatPromptTemplate.fromMessages([
-    ["system", SYSTEM_PROMPT],
-    ...chatHistory.map((msg) => {
-      if (msg instanceof HumanMessage) {
-        return ["human", msg.content] as [string, string];
-      } else if (msg instanceof AIMessage) {
-        return ["assistant", msg.content] as [string, string];
-      } else {
-        return ["system", msg.content] as [string, string];
-      }
-    }),
-    ["human", userMessage],
-  ]);
+  const messages = [
+    new SystemMessage(SYSTEM_PROMPT),
+    ...chatHistory,
+    new HumanMessage(userMessage),
+  ];
 
-  const chain = prompt.pipe(llm);
-  const response = await chain.invoke({});
-
+  const response = await llm.invoke(messages);
   return response.content.toString();
 }

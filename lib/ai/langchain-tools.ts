@@ -3,7 +3,7 @@
  * Wraps existing database query tools for use with LangChain agents
  */
 
-import { DynamicStructuredTool } from "langchain/tools";
+import { DynamicStructuredTool } from "@langchain/core/tools";
 import { z } from "zod";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { queryCache } from "@/lib/cache/query-cache";
