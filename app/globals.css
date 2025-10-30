@@ -39,7 +39,8 @@
   }
 
   body {
-    @apply bg-background text-text-primary font-sans antialiased;
+    @apply bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/20 text-text-primary font-sans antialiased;
+    background-attachment: fixed;
   }
 }
 
@@ -100,6 +101,60 @@
   .dark .glass-effect {
     background: rgba(30, 41, 59, 0.8);
     border: 1px solid rgba(255, 255, 255, 0.1);
+  }
+
+  /* Card Enhancements */
+  .card-elevated {
+    @apply bg-white shadow-lg hover:shadow-2xl transition-all duration-300 border border-slate-100;
+  }
+
+  .card-interactive {
+    @apply card-elevated hover:-translate-y-1 cursor-pointer transform;
+  }
+
+  /* Gradient Backgrounds */
+  .gradient-primary {
+    @apply bg-gradient-to-br from-blue-500 via-blue-600 to-indigo-600;
+  }
+
+  .gradient-success {
+    @apply bg-gradient-to-br from-emerald-500 via-green-500 to-teal-600;
+  }
+
+  .gradient-warning {
+    @apply bg-gradient-to-br from-amber-500 via-orange-500 to-red-500;
+  }
+
+  .text-gradient-primary {
+    @apply bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 bg-clip-text text-transparent;
+  }
+
+  /* Smooth reveal on hover */
+  .hover-lift {
+    @apply transition-all duration-300 hover:-translate-y-1 hover:shadow-xl;
+  }
+
+  /* Skeleton loader with better animation */
+  .skeleton {
+    @apply animate-pulse-skeleton bg-gradient-to-r from-slate-200 via-slate-100 to-slate-200 bg-[length:200%_100%];
+  }
+
+  /* Custom scrollbar */
+  ::-webkit-scrollbar {
+    @apply w-2 h-2;
+  }
+
+  ::-webkit-scrollbar-track {
+    @apply bg-slate-100 rounded-full;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    @apply bg-slate-300 rounded-full hover:bg-slate-400 transition-colors;
+  }
+
+  /* Selection */
+  ::selection {
+    @apply bg-blue-200 text-blue-900;
   }
 }
 
