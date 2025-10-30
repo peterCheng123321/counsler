@@ -288,9 +288,16 @@ export interface CreateStudentInput {
   lastName: string;
   email: string;
   phone?: string;
+  dateOfBirth?: string;
   graduationYear: number;
   gpaUnweighted?: number;
   gpaWeighted?: number;
+  satScore?: number;
+  actScore?: number;
+  applicationProgress?: number;
+  resumeUrl?: string;
+  transcriptUrl?: string;
+  profilePictureUrl?: string;
 }
 
 export interface UpdateStudentInput {
