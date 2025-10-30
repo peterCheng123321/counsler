@@ -21,7 +21,7 @@ import {
   AlertCircle,
 } from "lucide-react";
 import { useAI } from "@/lib/contexts/ai-context";
-import { executeCommand, type CommandContext, type CommandAction } from "@/lib/ai/command-executor";
+import { type CommandContext, type CommandAction } from "@/lib/ai/command-executor";
 import { useQuery } from "@tanstack/react-query";
 
 interface AICommandPaletteProps {
@@ -129,7 +129,25 @@ export function AICommandPalette({ open, onOpenChange }: AICommandPaletteProps) 
 
     try {
       const context = buildContext();
-      const action = await executeCommand(command, context);
+
+      // Call server-side API to execute command
+      const response = await fetch("/api/v1/command/execute", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          command,
+          context,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to execute command");
+      }
+
+      const json = await response.json();
+      const action = json.data as CommandAction;
 
       setResult(action);
       addRecentCommand(command);
@@ -211,7 +229,15 @@ export function AICommandPalette({ open, onOpenChange }: AICommandPaletteProps) 
 
   return (
     <CommandDialog open={open} onOpenChange={onOpenChange}>
-      <div className="flex items-center border-b px-3">
+      {/* Hidden accessibility title */}
+      <div className="sr-only" role="heading" aria-level={1}>
+        AI Assistant Command Palette
+      </div>
+      <div className="sr-only" id="command-description">
+        Type natural language commands to navigate, filter, or search. Press Enter to execute.
+      </div>
+
+      <div className="flex items-center border-b px-3" aria-describedby="command-description">
         <Sparkles className="mr-2 h-4 w-4 shrink-0 text-primary" />
         <input
           className="flex h-11 w-full rounded-md bg-transparent py-3 text-sm outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-50"
@@ -220,6 +246,7 @@ export function AICommandPalette({ open, onOpenChange }: AICommandPaletteProps) 
           onChange={(e) => setInputValue(e.target.value)}
           onKeyDown={handleKeyDown}
           disabled={isProcessing}
+          aria-label="AI command input"
         />
         {isProcessing && <Loader2 className="mr-2 h-4 w-4 animate-spin text-primary" />}
       </div>
