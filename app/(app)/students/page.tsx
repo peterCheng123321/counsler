@@ -12,7 +12,9 @@ import { AIBulkUploadModal } from "@/components/students/ai-bulk-upload-modal";
 import { StudentFilters } from "@/components/students/student-filters";
 import { StatsCard } from "@/components/charts/stats-card";
 import { ProgressChart, type ProgressData } from "@/components/charts/progress-chart";
+import { QuickAIButton } from "@/components/ai/quick-ai-button";
 import { apiClient, type Student } from "@/lib/api/client";
+import { toast } from "sonner";
 
 export default function StudentsPage() {
   const [searchQuery, setSearchQuery] = useState("");
@@ -93,6 +95,29 @@ export default function StudentsPage() {
           </p>
         </div>
         <div className="flex gap-2">
+          <QuickAIButton
+            suggestions={[
+              {
+                label: "Find high-achieving students",
+                prompt: "Show me students with GPA above 3.8 or SAT scores above 1400",
+              },
+              {
+                label: "Students needing attention",
+                prompt: "Which students have application progress below 50%?",
+              },
+              {
+                label: "Graduation year summary",
+                prompt: "Give me a summary of students grouped by graduation year",
+              },
+              {
+                label: "Suggest college matches",
+                prompt: "Based on the current student data, suggest colleges that would be good matches",
+              },
+            ]}
+            onSelect={(prompt, response) => {
+              toast.info("AI Response", { description: response });
+            }}
+          />
           <Button
             variant="outline"
             onClick={() => setShowBulkUploadModal(true)}

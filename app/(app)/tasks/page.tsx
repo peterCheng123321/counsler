@@ -10,8 +10,10 @@ import { TaskFilters } from "@/components/tasks/task-filters";
 import { CalendarView } from "@/components/tasks/calendar-view";
 import { StatsCard } from "@/components/charts/stats-card";
 import { TimelineChart, type TimelineData } from "@/components/charts/timeline-chart";
+import { QuickAIButton } from "@/components/ai/quick-ai-button";
 import { apiClient, type Task } from "@/lib/api/client";
 import { format, startOfWeek, endOfWeek, eachDayOfInterval, isSameDay } from "date-fns";
+import { toast } from "sonner";
 
 export default function TasksPage() {
   const [showAddModal, setShowAddModal] = useState(false);
@@ -93,6 +95,29 @@ export default function TasksPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <QuickAIButton
+            suggestions={[
+              {
+                label: "What should I focus on today?",
+                prompt: "Based on my current tasks, what should I prioritize today?",
+              },
+              {
+                label: "Show overdue tasks",
+                prompt: "Which tasks are overdue and need immediate attention?",
+              },
+              {
+                label: "Weekly task summary",
+                prompt: "Give me a summary of tasks for this week",
+              },
+              {
+                label: "Suggest task priorities",
+                prompt: "Analyze my tasks and suggest which ones should be higher priority",
+              },
+            ]}
+            onSelect={(prompt, response) => {
+              toast.info("AI Response", { description: response });
+            }}
+          />
           <div className="flex rounded-lg border border-border bg-background p-1">
             <Button
               variant={view === "list" ? "secondary" : "ghost"}
