@@ -45,6 +45,75 @@ function addRecentCommand(command: string) {
   localStorage.setItem("recent_commands", JSON.stringify(updated));
 }
 
+// Context-aware command suggestions based on current page
+function getContextSuggestions(page: CommandContext["currentPage"]): string[] {
+  switch (page) {
+    case "students":
+      return [
+        "Show students graduating in 2025",
+        "Find students with progress below 50%",
+        "List high-achieving students (GPA > 3.8)",
+        "Show students who need attention",
+        "Display students by graduation year",
+      ];
+    case "tasks":
+      return [
+        "Show overdue tasks",
+        "Filter high priority tasks",
+        "Find tasks due this week",
+        "Show completed tasks from today",
+        "List pending tasks by priority",
+      ];
+    case "chatbot":
+      return [
+        "Analyze student progress trends",
+        "Suggest college recommendations",
+        "Generate insights about at-risk students",
+        "Create task suggestions for students",
+      ];
+    default:
+      return [
+        "Go to students page",
+        "Show all tasks",
+        "Open chatbot",
+        "Navigate to agent dashboard",
+      ];
+  }
+}
+
+// Fuzzy search for command matching
+function fuzzyMatch(query: string, commands: string[]): string[] {
+  if (!query.trim()) return commands;
+
+  const lowerQuery = query.toLowerCase();
+  const words = lowerQuery.split(" ").filter(w => w.length > 0);
+
+  return commands
+    .map(cmd => {
+      const lowerCmd = cmd.toLowerCase();
+      let score = 0;
+
+      // Exact match gets highest score
+      if (lowerCmd === lowerQuery) score += 100;
+
+      // Starts with query gets high score
+      if (lowerCmd.startsWith(lowerQuery)) score += 50;
+
+      // Contains query gets medium score
+      if (lowerCmd.includes(lowerQuery)) score += 25;
+
+      // Each word match gets points
+      words.forEach(word => {
+        if (lowerCmd.includes(word)) score += 10;
+      });
+
+      return { cmd, score };
+    })
+    .filter(({ score }) => score > 0)
+    .sort((a, b) => b.score - a.score)
+    .map(({ cmd }) => cmd);
+}
+
 export function AICommandPalette({ open, onOpenChange }: AICommandPaletteProps) {
   const router = useRouter();
   const pathname = usePathname();
@@ -296,25 +365,58 @@ export function AICommandPalette({ open, onOpenChange }: AICommandPaletteProps) 
           </CommandGroup>
         )}
 
-        {/* Show examples if no input */}
+        {/* Show context-aware suggestions */}
         {!inputValue && !result && recentCommands.length === 0 && (
-          <CommandGroup heading="Examples">
-            <CommandItem disabled className="text-muted-foreground">
-              <Search className="mr-2 h-4 w-4" />
-              <span>show Sarah Williams&apos; details</span>
-            </CommandItem>
-            <CommandItem disabled className="text-muted-foreground">
-              <Filter className="mr-2 h-4 w-4" />
-              <span>filter high priority tasks</span>
-            </CommandItem>
-            <CommandItem disabled className="text-muted-foreground">
-              <ArrowRight className="mr-2 h-4 w-4" />
-              <span>go to students page</span>
-            </CommandItem>
-            <CommandItem disabled className="text-muted-foreground">
-              <Search className="mr-2 h-4 w-4" />
-              <span>find students graduating 2025</span>
-            </CommandItem>
+          <CommandGroup heading={`Suggestions for ${getCurrentPage()} page`}>
+            {getContextSuggestions(getCurrentPage()).map((suggestion, index) => (
+              <CommandItem
+                key={index}
+                onSelect={() => {
+                  setInputValue(suggestion);
+                  handleExecuteCommand(suggestion);
+                }}
+                className="cursor-pointer"
+              >
+                <Sparkles className="mr-2 h-4 w-4 text-primary" />
+                <span>{suggestion}</span>
+              </CommandItem>
+            ))}
+          </CommandGroup>
+        )}
+
+        {/* Show fuzzy-matched suggestions while typing */}
+        {inputValue && !result && !isProcessing && (
+          <CommandGroup heading="Suggestions">
+            {fuzzyMatch(
+              inputValue,
+              [
+                ...recentCommands,
+                ...getContextSuggestions(getCurrentPage()),
+                "Show all students",
+                "Filter high priority tasks",
+                "Find overdue tasks",
+                "Go to chatbot",
+                "Open agent dashboard",
+                "Show students graduating 2025",
+                "Find students with GPA above 3.5",
+                "List tasks due this week",
+                "Show completed tasks",
+              ]
+            )
+              .slice(0, 5)
+              .map((suggestion, index) => (
+                <CommandItem
+                  key={index}
+                  onSelect={() => {
+                    setInputValue(suggestion);
+                    handleExecuteCommand(suggestion);
+                  }}
+                  className="cursor-pointer"
+                >
+                  <Search className="mr-2 h-4 w-4" />
+                  <span>{suggestion}</span>
+                </CommandItem>
+              ))}
           </CommandGroup>
         )}
 
