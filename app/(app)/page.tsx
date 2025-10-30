@@ -107,7 +107,7 @@ export default function DashboardPage() {
             Welcome back
           </h1>
           <p className="text-text-secondary mt-1">
-            Here's what's happening today
+            Here&apos;s what&apos;s happening today
           </p>
         </div>
           {process.env.NEXT_PUBLIC_DEMO_MODE === "true" && (
@@ -175,7 +175,7 @@ export default function DashboardPage() {
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-2">
                 <Calendar className="h-5 w-5 text-primary" />
-                <h2 className="text-xl font-semibold text-text-primary">Today's Tasks</h2>
+                <h2 className="text-xl font-semibold text-text-primary">Today&apos;s Tasks</h2>
               </div>
               <Button variant="ghost" size="sm" onClick={() => router.push("/tasks")}>
                 View all <ArrowRight className="h-4 w-4 ml-1" />
