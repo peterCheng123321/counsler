@@ -12,11 +12,19 @@ import { AIConfirmationDialog } from "@/components/ai/ai-confirmation-dialog";
 import { apiClient, type Message as APIMessage } from "@/lib/api/client";
 import type { AIAction } from "@/lib/contexts/ai-context";
 
+interface Insight {
+  category: string;
+  priority: "high" | "medium" | "low";
+  finding: string;
+  recommendation: string;
+}
+
 interface Message {
   id: string;
   role: "user" | "assistant";
   content: string;
   timestamp: Date;
+  insights?: Insight[];
 }
 
 const welcomeSuggestions = [
@@ -188,6 +196,21 @@ function ChatbotContent() {
                     console.log("Tool call:", data.toolCall);
                     setIsUsingTools(true);
                     setIsTyping(true);
+                  } else if (data.type === "insight" && data.insight) {
+                    // Insight received from LangGraph agent
+                    console.log("Insight received:", data.insight);
+                    setMessages((prev) =>
+                      prev.map((msg) => {
+                        if (msg.id === aiMessageId) {
+                          const currentInsights = msg.insights || [];
+                          return {
+                            ...msg,
+                            insights: [...currentInsights, data.insight],
+                          };
+                        }
+                        return msg;
+                      })
+                    );
                   } else if (data.type === "done") {
                     conversationId = data.conversationId || null;
                     setIsTyping(false);

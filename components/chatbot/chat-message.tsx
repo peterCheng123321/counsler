@@ -7,6 +7,14 @@ import { format } from "date-fns";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { useTypewriter } from "@/hooks/use-typewriter";
+import { InsightsContainer } from "./insights-container";
+
+export interface Insight {
+  category: string;
+  priority: "high" | "medium" | "low";
+  finding: string;
+  recommendation: string;
+}
 
 interface ChatMessageProps {
   message: {
@@ -14,6 +22,7 @@ interface ChatMessageProps {
     role: "user" | "assistant";
     content: string;
     timestamp: Date;
+    insights?: Insight[];
   };
   enableTypewriter?: boolean;
 }
@@ -194,6 +203,14 @@ export const ChatMessage = memo(function ChatMessage({ message, enableTypewriter
             )}
           </div>
         </div>
+
+        {/* Display insights if available */}
+        {!isUser && message.insights && message.insights.length > 0 && (
+          <div className="max-w-[80%]">
+            <InsightsContainer insights={message.insights} />
+          </div>
+        )}
+
         {formattedTime && (
           <span className="text-xs text-text-tertiary/80 px-1">
             {formattedTime}
