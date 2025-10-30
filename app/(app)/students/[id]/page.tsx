@@ -11,7 +11,9 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ChatMessage } from "@/components/chatbot/chat-message";
+import { EssayEditor } from "@/components/essays/essay-editor";
 import { apiClient } from "@/lib/api/client";
+import { toast } from "sonner";
 
 interface Message {
   id: string;
@@ -35,6 +37,22 @@ export default function StudentDetailPage({
   const [isTyping, setIsTyping] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // Mock essay data
+  const [essay] = useState({
+    id: "mock-essay-1",
+    title: "The Moment That Changed Everything",
+    content: `The summer before my junior year, I stood in front of my grandmother's old sewing machine, completely lost. She had passed away three months earlier, and this machine was the last connection I had to her. I had always admired her handmade quilts but never learned how to make them myself.
+
+That day, I made a decision that would change my life. I decided to learn quilting, not just to honor her memory, but to understand the patience and dedication she poured into every stitch. What started as a simple gesture of remembrance became a journey of self-discovery.
+
+Learning to quilt taught me more than just a craft. It taught me that mistakes are just opportunities to create something unique. When I accidentally sewed two pieces backwards, instead of seeing it as a failure, I saw it as a new pattern emerging. This mindset has influenced how I approach challenges in my academic life.
+
+In my AP Calculus class, when I struggled with integrals, I remembered those backward stitches. I stopped seeing math problems as obstacles and started seeing them as patterns waiting to be discovered. My grade improved from a B- to an A, but more importantly, my relationship with learning transformed.
+
+Now, I lead a quilting club at school where we create quilts for children in hospitals. We've made over 50 quilts this year, and each one carries the same lesson my grandmother taught me: that beauty often comes from unexpected places, and patience can turn mistakes into masterpieces.`,
+    status: "pending_review",
+  });
 
   const { data, isLoading, error } = useQuery({
     queryKey: ["student", id],
@@ -107,6 +125,17 @@ export default function StudentDetailPage({
     } finally {
       setIsTyping(false);
     }
+  };
+
+  const handleSaveEssay = async (title: string, content: string) => {
+    // In a real app, this would save to database
+    // For now, just show success
+    return new Promise<void>((resolve) => {
+      setTimeout(() => {
+        console.log("Saving essay:", { title, content });
+        resolve();
+      }, 500);
+    });
   };
 
   if (isLoading) {
@@ -498,8 +527,18 @@ export default function StudentDetailPage({
         {/* Essays Tab */}
         {activeTab === "essays" && (
           <div className="p-6">
-            <h2 className="text-xl font-semibold text-text-primary mb-4">Essays & Writing</h2>
-            <p className="text-text-secondary">Essay information will be displayed here.</p>
+            <div className="mb-6">
+              <h2 className="text-xl font-semibold text-text-primary mb-2">Essay Editor</h2>
+              <p className="text-text-secondary">
+                Edit the essay and get AI-powered suggestions for improvement
+              </p>
+            </div>
+            <EssayEditor
+              essayId={essay.id}
+              initialTitle={essay.title}
+              initialContent={essay.content}
+              onSave={handleSaveEssay}
+            />
           </div>
         )}
 

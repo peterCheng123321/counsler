@@ -3,6 +3,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useState } from "react";
 import { Toaster } from "@/components/ui/toaster";
+import { Toaster as SonnerToaster } from "sonner";
 import { AIProvider } from "@/lib/contexts/ai-context";
 
 export function Providers({ children }: { children: React.ReactNode }) {
@@ -27,6 +28,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
       <AIProvider>
         {children}
         <Toaster />
+        <SonnerToaster position="top-right" />
       </AIProvider>
     </QueryClientProvider>
   );
