@@ -12,6 +12,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ChatMessage } from "@/components/chatbot/chat-message";
 import { InlineEssayEditor } from "@/components/essays/inline-essay-editor";
+import { UploadModal } from "@/components/upload/upload-modal";
 import { apiClient } from "@/lib/api/client";
 import { toast } from "sonner";
 
@@ -35,6 +36,8 @@ export default function StudentDetailPage({
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [isTyping, setIsTyping] = useState(false);
+  const [showUploadModal, setShowUploadModal] = useState(false);
+  const [uploadFileType, setUploadFileType] = useState<"profile" | "resume" | "transcript">("profile");
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -136,6 +139,16 @@ Now, I lead a quilting club at school where we create quilts for children in hos
         resolve();
       }, 500);
     });
+  };
+
+  const handleOpenUploadModal = (fileType: "profile" | "resume" | "transcript") => {
+    setUploadFileType(fileType);
+    setShowUploadModal(true);
+  };
+
+  const handleUploadComplete = (url: string) => {
+    // Invalidate student query to refresh data
+    queryClient.invalidateQueries({ queryKey: ["student", id] });
   };
 
   if (isLoading) {
@@ -437,7 +450,10 @@ Now, I lead a quilting club at school where we create quilts for children in hos
             <div>
               <h2 className="text-xl font-semibold text-text-primary mb-4">Documents & Files</h2>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <Card>
+                <Card
+                  className="cursor-pointer hover:bg-surface/80 transition-colors"
+                  onClick={() => handleOpenUploadModal("profile")}
+                >
                   <CardContent className="pt-6">
                     <div className="flex flex-col items-center text-center space-y-3">
                       <div className={`rounded-full p-3 ${student.profile_picture_url ? 'bg-green-100' : 'bg-gray-100'}`}>
@@ -446,23 +462,19 @@ Now, I lead a quilting club at school where we create quilts for children in hos
                       <div>
                         <p className="text-sm font-medium text-text-primary mb-1">Profile Picture</p>
                         {student.profile_picture_url ? (
-                          <a
-                            href={student.profile_picture_url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-xs text-primary hover:underline"
-                          >
-                            View Photo
-                          </a>
+                          <span className="text-xs text-green-600">Uploaded</span>
                         ) : (
-                          <p className="text-xs text-text-secondary">Not uploaded</p>
+                          <span className="text-xs text-text-secondary">Click to upload</span>
                         )}
                       </div>
                     </div>
                   </CardContent>
                 </Card>
 
-                <Card>
+                <Card
+                  className="cursor-pointer hover:bg-surface/80 transition-colors"
+                  onClick={() => handleOpenUploadModal("resume")}
+                >
                   <CardContent className="pt-6">
                     <div className="flex flex-col items-center text-center space-y-3">
                       <div className={`rounded-full p-3 ${student.resume_url ? 'bg-blue-100' : 'bg-gray-100'}`}>
@@ -471,23 +483,19 @@ Now, I lead a quilting club at school where we create quilts for children in hos
                       <div>
                         <p className="text-sm font-medium text-text-primary mb-1">Resume</p>
                         {student.resume_url ? (
-                          <a
-                            href={student.resume_url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-xs text-primary hover:underline"
-                          >
-                            View Resume
-                          </a>
+                          <span className="text-xs text-blue-600">Uploaded</span>
                         ) : (
-                          <p className="text-xs text-text-secondary">Not uploaded</p>
+                          <span className="text-xs text-text-secondary">Click to upload</span>
                         )}
                       </div>
                     </div>
                   </CardContent>
                 </Card>
 
-                <Card>
+                <Card
+                  className="cursor-pointer hover:bg-surface/80 transition-colors"
+                  onClick={() => handleOpenUploadModal("transcript")}
+                >
                   <CardContent className="pt-6">
                     <div className="flex flex-col items-center text-center space-y-3">
                       <div className={`rounded-full p-3 ${student.transcript_url ? 'bg-purple-100' : 'bg-gray-100'}`}>
@@ -496,16 +504,9 @@ Now, I lead a quilting club at school where we create quilts for children in hos
                       <div>
                         <p className="text-sm font-medium text-text-primary mb-1">Transcript</p>
                         {student.transcript_url ? (
-                          <a
-                            href={student.transcript_url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-xs text-primary hover:underline"
-                          >
-                            View Transcript
-                          </a>
+                          <span className="text-xs text-purple-600">Uploaded</span>
                         ) : (
-                          <p className="text-xs text-text-secondary">Not uploaded</p>
+                          <span className="text-xs text-text-secondary">Click to upload</span>
                         )}
                       </div>
                     </div>
@@ -550,6 +551,24 @@ Now, I lead a quilting club at school where we create quilts for children in hos
           </div>
         )}
       </div>
+
+      {/* Upload Modal */}
+      {student && (
+        <UploadModal
+          open={showUploadModal}
+          onOpenChange={setShowUploadModal}
+          studentId={id}
+          fileType={uploadFileType}
+          currentFileUrl={
+            uploadFileType === "profile"
+              ? student.profile_picture_url
+              : uploadFileType === "resume"
+              ? student.resume_url
+              : student.transcript_url
+          }
+          onUploadComplete={handleUploadComplete}
+        />
+      )}
     </div>
   );
 }
