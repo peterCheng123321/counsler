@@ -189,7 +189,7 @@ export function AddTaskModal({ open, onOpenChange }: AddTaskModalProps) {
               <Select
                 value={watch("studentId") || "none"}
                 onValueChange={(value) =>
-                  setValue("studentId", value === "none" ? undefined : value)
+                  setValue("studentId", value === "none" ? "none" : value)
                 }
               >
                 <SelectTrigger>
@@ -197,11 +197,13 @@ export function AddTaskModal({ open, onOpenChange }: AddTaskModalProps) {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="none">No student</SelectItem>
-                  {students.map((student: Student) => (
-                    <SelectItem key={student.id} value={student.id}>
-                      {student.first_name} {student.last_name}
-                    </SelectItem>
-                  ))}
+                  {students
+                    .filter((student: Student) => student.id && student.id.trim() !== "")
+                    .map((student: Student) => (
+                      <SelectItem key={student.id} value={student.id}>
+                        {student.first_name} {student.last_name}
+                      </SelectItem>
+                    ))}
                 </SelectContent>
               </Select>
             </div>

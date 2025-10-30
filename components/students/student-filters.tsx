@@ -56,11 +56,11 @@ export function StudentFilters({
           <div className="space-y-2">
             <Label>Graduation Year</Label>
             <Select
-              value={filters.graduationYear?.toString() || ""}
+              value={filters.graduationYear?.toString() || "all"}
               onValueChange={(value) =>
                 onFiltersChange({
                   ...filters,
-                  graduationYear: value ? parseInt(value) : undefined,
+                  graduationYear: value === "all" ? undefined : parseInt(value),
                 })
               }
             >
@@ -68,7 +68,7 @@ export function StudentFilters({
                 <SelectValue placeholder="All years" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">All years</SelectItem>
+                <SelectItem value="all">All years</SelectItem>
                 {[...Array(6)].map((_, i) => {
                   const year = currentYear + i;
                   return (
