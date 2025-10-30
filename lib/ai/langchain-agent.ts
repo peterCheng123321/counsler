@@ -114,6 +114,7 @@ export async function runLangChainAgent(
   }>,
   config: LangChainAgentConfig = {}
 ) {
+  const agentStart = Date.now();
   const llm = createLLM(config);
 
   // Bind tools to the LLM
@@ -141,9 +142,13 @@ export async function runLangChainAgent(
     iterationCount++;
 
     console.log(`[LangChain Agent] Iteration ${iterationCount}`);
+    const iterationStart = Date.now();
 
     // Invoke LLM
+    const llmStart = Date.now();
     const response = await llmWithTools.invoke(allMessages);
+    const llmDuration = Date.now() - llmStart;
+    console.log(`[LangChain Agent] LLM call completed in ${llmDuration}ms`);
 
     // Check if there are tool calls
     if (response.tool_calls && response.tool_calls.length > 0) {
@@ -153,8 +158,10 @@ export async function runLangChainAgent(
       allMessages.push(response);
 
       // Execute tools in parallel for better performance
+      const toolsStart = Date.now();
       const toolPromises = response.tool_calls.map(async (toolCall) => {
         try {
+          const toolStart = Date.now();
           console.log(`[LangChain Agent] Executing tool: ${toolCall.name}`);
 
           // Find and execute the matching tool
@@ -165,6 +172,8 @@ export async function runLangChainAgent(
 
           // Call the tool's func directly with proper typing
           const toolResult = await tool.func(toolCall.args as any);
+          const toolDuration = Date.now() - toolStart;
+          console.log(`[LangChain Agent] Tool ${toolCall.name} completed in ${toolDuration}ms`);
 
           return {
             success: true,
@@ -183,6 +192,8 @@ export async function runLangChainAgent(
 
       // Wait for all tools to complete in parallel
       const toolResults = await Promise.all(toolPromises);
+      const toolsDuration = Date.now() - toolsStart;
+      console.log(`[LangChain Agent] All tools completed in ${toolsDuration}ms`);
 
       // Add all tool results to messages
       for (const result of toolResults) {
@@ -219,6 +230,9 @@ export async function runLangChainAgent(
   if (iterationCount >= maxIterations) {
     console.warn(`[LangChain Agent] Max iterations (${maxIterations}) reached`);
   }
+
+  const agentDuration = Date.now() - agentStart;
+  console.log(`[LangChain Agent] Total agent execution time: ${agentDuration}ms (${iterationCount} iterations)`);
 
   return {
     content: fullContent || "I apologize, but I couldn't generate a response. Please try again.",
