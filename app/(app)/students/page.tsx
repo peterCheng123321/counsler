@@ -12,6 +12,7 @@ import { AIBulkUploadModal } from "@/components/students/ai-bulk-upload-modal";
 import { StudentFilters } from "@/components/students/student-filters";
 import { StatsCard } from "@/components/charts/stats-card";
 import { ProgressChart, type ProgressData } from "@/components/charts/progress-chart";
+import { StudentDistributionChart } from "@/components/charts/student-distribution-chart";
 import { QuickAIButton } from "@/components/ai/quick-ai-button";
 import { apiClient, type Student } from "@/lib/api/client";
 import { toast } from "sonner";
@@ -174,12 +175,29 @@ export default function StudentsPage() {
         </div>
       )}
 
-      {/* Progress Distribution Chart */}
+      {/* Charts */}
       {!isLoading && !error && students.length > 0 && (
-        <div className="rounded-xl border border-border bg-surface p-6 shadow-sm">
-          <ProgressChart
-            data={stats.progressDistribution}
-            title="Application Progress Distribution"
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <div className="rounded-xl border border-border bg-surface p-6 shadow-sm">
+            <ProgressChart
+              data={stats.progressDistribution}
+              title="Application Progress Distribution"
+            />
+          </div>
+          <StudentDistributionChart
+            data={Array.from(
+              students.reduce((acc, s) => {
+                if (s.graduation_year) {
+                  acc.set(s.graduation_year, (acc.get(s.graduation_year) || 0) + 1);
+                }
+                return acc;
+              }, new Map<number, number>())
+            )
+              .map(([year, count]) => ({ name: year.toString(), count }))
+              .sort((a, b) => parseInt(a.name) - parseInt(b.name))}
+            title="Students by Graduation Year"
+            description="Distribution across graduating classes"
+            type="bar"
           />
         </div>
       )}

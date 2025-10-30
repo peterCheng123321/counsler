@@ -10,6 +10,7 @@ import { TaskFilters } from "@/components/tasks/task-filters";
 import { CalendarView } from "@/components/tasks/calendar-view";
 import { StatsCard } from "@/components/charts/stats-card";
 import { TimelineChart, type TimelineData } from "@/components/charts/timeline-chart";
+import { DeadlineCalendar } from "@/components/charts/deadline-calendar";
 import { QuickAIButton } from "@/components/ai/quick-ai-button";
 import { apiClient, type Task } from "@/lib/api/client";
 import { format, startOfWeek, endOfWeek, eachDayOfInterval, isSameDay } from "date-fns";
@@ -177,12 +178,32 @@ export default function TasksPage() {
         </div>
       )}
 
-      {/* Weekly Timeline Chart */}
+      {/* Charts */}
       {!isLoading && !error && tasks.length > 0 && (
-        <div className="rounded-xl border border-border bg-surface p-6 shadow-sm">
-          <TimelineChart
-            data={stats.timelineData}
-            title="This Week's Task Timeline"
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <div className="rounded-xl border border-border bg-surface p-6 shadow-sm">
+            <TimelineChart
+              data={stats.timelineData}
+              title="This Week's Task Timeline"
+            />
+          </div>
+          <DeadlineCalendar
+            deadlines={tasks
+              .filter((t) => t.due_date && t.status !== "completed")
+              .map((t) => ({
+                id: t.id,
+                title: t.title,
+                dueDate: t.due_date!,
+                priority: (t.priority as "high" | "medium" | "low") || "medium",
+                status: t.status,
+                studentName: t.student_name,
+                category: t.category || undefined,
+              }))
+              .sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime())
+              .slice(0, 10)}
+            title="Upcoming Deadlines"
+            description="Next 10 pending tasks"
+            daysAhead={14}
           />
         </div>
       )}
