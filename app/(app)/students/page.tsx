@@ -2,11 +2,12 @@
 
 import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Plus, Search, Filter, Users, GraduationCap, Target, TrendingUp } from "lucide-react";
+import { Plus, Search, Filter, Users, GraduationCap, Target, TrendingUp, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { StudentCard } from "@/components/students/student-card";
 import { AddStudentModal } from "@/components/students/add-student-modal";
+import { BulkUploadModal } from "@/components/students/bulk-upload-modal";
 import { StudentFilters } from "@/components/students/student-filters";
 import { StatsCard } from "@/components/charts/stats-card";
 import { ProgressChart, type ProgressData } from "@/components/charts/progress-chart";
@@ -15,6 +16,7 @@ import { apiClient, type Student } from "@/lib/api/client";
 export default function StudentsPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [showAddModal, setShowAddModal] = useState(false);
+  const [showBulkUploadModal, setShowBulkUploadModal] = useState(false);
   const [filters, setFilters] = useState<{
     graduationYear?: number;
     progressMin?: number;
@@ -88,10 +90,19 @@ export default function StudentsPage() {
             Manage your students and track their application progress
           </p>
         </div>
-        <Button onClick={() => setShowAddModal(true)}>
-          <Plus className="h-4 w-4 mr-2" />
-          Add Student
-        </Button>
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            onClick={() => setShowBulkUploadModal(true)}
+          >
+            <Upload className="h-4 w-4 mr-2" />
+            Bulk Upload
+          </Button>
+          <Button onClick={() => setShowAddModal(true)}>
+            <Plus className="h-4 w-4 mr-2" />
+            Add Student
+          </Button>
+        </div>
       </div>
 
       {/* Statistics Cards */}
@@ -252,6 +263,12 @@ export default function StudentsPage() {
       <AddStudentModal
         open={showAddModal}
         onOpenChange={setShowAddModal}
+      />
+
+      {/* Bulk Upload Modal */}
+      <BulkUploadModal
+        open={showBulkUploadModal}
+        onOpenChange={setShowBulkUploadModal}
       />
     </div>
   );

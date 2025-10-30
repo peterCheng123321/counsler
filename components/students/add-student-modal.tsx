@@ -24,6 +24,7 @@ const studentFormSchema = z.object({
   lastName: z.string().min(2, "Last name must be at least 2 characters"),
   email: z.string().email("Invalid email address"),
   phone: z.string().optional(),
+  dateOfBirth: z.string().optional(),
   graduationYear: z
     .number()
     .int()
@@ -31,6 +32,9 @@ const studentFormSchema = z.object({
     .max(new Date().getFullYear() + 5),
   gpaUnweighted: z.number().min(0).max(5).optional(),
   gpaWeighted: z.number().min(0).max(5).optional(),
+  satScore: z.number().min(400).max(1600).optional(),
+  actScore: z.number().min(1).max(36).optional(),
+  applicationProgress: z.number().min(0).max(100).optional(),
 });
 
 type StudentFormData = z.infer<typeof studentFormSchema>;
@@ -91,7 +95,7 @@ export function AddStudentModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[500px]">
+      <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Add New Student</DialogTitle>
           <DialogDescription>
@@ -137,15 +141,26 @@ export function AddStudentModal({
             />
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="phone">Phone (Optional)</Label>
-            <Input
-              id="phone"
-              type="tel"
-              {...register("phone")}
-              placeholder="(555) 123-4567"
-              error={errors.phone?.message}
-            />
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="phone">Phone (Optional)</Label>
+              <Input
+                id="phone"
+                type="tel"
+                {...register("phone")}
+                placeholder="(555) 123-4567"
+                error={errors.phone?.message}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="dateOfBirth">Date of Birth (Optional)</Label>
+              <Input
+                id="dateOfBirth"
+                type="date"
+                {...register("dateOfBirth")}
+                error={errors.dateOfBirth?.message}
+              />
+            </div>
           </div>
 
           <div className="space-y-2">
@@ -189,6 +204,46 @@ export function AddStudentModal({
                 error={errors.gpaWeighted?.message}
               />
             </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="satScore">SAT Score (Optional)</Label>
+              <Input
+                id="satScore"
+                type="number"
+                min="400"
+                max="1600"
+                {...register("satScore", { valueAsNumber: true })}
+                placeholder="1450"
+                error={errors.satScore?.message}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="actScore">ACT Score (Optional)</Label>
+              <Input
+                id="actScore"
+                type="number"
+                min="1"
+                max="36"
+                {...register("actScore", { valueAsNumber: true })}
+                placeholder="32"
+                error={errors.actScore?.message}
+              />
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="applicationProgress">Application Progress (%)</Label>
+            <Input
+              id="applicationProgress"
+              type="number"
+              min="0"
+              max="100"
+              {...register("applicationProgress", { valueAsNumber: true })}
+              placeholder="0"
+              error={errors.applicationProgress?.message}
+            />
           </div>
 
           <DialogFooter>

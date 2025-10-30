@@ -2,8 +2,9 @@
 
 import { use, useState, useRef, useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Edit, MoreVertical, Send, GraduationCap, Mail, Calendar, TrendingUp } from "lucide-react";
+import { ArrowLeft, Edit, MoreVertical, Send, GraduationCap, Mail, Calendar, TrendingUp, Phone, FileText, Image, Award } from "lucide-react";
 import Link from "next/link";
+import { format } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -281,9 +282,55 @@ export default function StudentDetailPage({
         {/* Profile Tab */}
         {activeTab === "profile" && (
           <div className="p-6 space-y-6">
+            {/* Basic Information */}
+            <div>
+              <h2 className="text-xl font-semibold text-text-primary mb-4">Basic Information</h2>
+              <Card>
+                <CardContent className="pt-6">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="flex items-start gap-3">
+                      <Mail className="h-5 w-5 text-primary mt-0.5" />
+                      <div>
+                        <p className="text-sm text-text-secondary">Email</p>
+                        <p className="text-text-primary">{student.email}</p>
+                      </div>
+                    </div>
+                    {student.phone && (
+                      <div className="flex items-start gap-3">
+                        <Phone className="h-5 w-5 text-primary mt-0.5" />
+                        <div>
+                          <p className="text-sm text-text-secondary">Phone</p>
+                          <p className="text-text-primary">{student.phone}</p>
+                        </div>
+                      </div>
+                    )}
+                    {student.date_of_birth && (
+                      <div className="flex items-start gap-3">
+                        <Calendar className="h-5 w-5 text-primary mt-0.5" />
+                        <div>
+                          <p className="text-sm text-text-secondary">Date of Birth</p>
+                          <p className="text-text-primary">
+                            {format(new Date(student.date_of_birth), "MMMM d, yyyy")}
+                          </p>
+                        </div>
+                      </div>
+                    )}
+                    <div className="flex items-start gap-3">
+                      <GraduationCap className="h-5 w-5 text-primary mt-0.5" />
+                      <div>
+                        <p className="text-sm text-text-secondary">Graduation Year</p>
+                        <p className="text-text-primary">{student.graduation_year}</p>
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Academic Profile */}
             <div>
               <h2 className="text-xl font-semibold text-text-primary mb-4">Academic Profile</h2>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                 <Card>
                   <CardHeader className="pb-3">
                     <CardTitle className="text-sm font-medium text-text-secondary">GPA (Unweighted)</CardTitle>
@@ -308,45 +355,134 @@ export default function StudentDetailPage({
 
                 <Card>
                   <CardHeader className="pb-3">
-                    <CardTitle className="text-sm font-medium text-text-secondary">Graduation Year</CardTitle>
+                    <CardTitle className="text-sm font-medium text-text-secondary">SAT Score</CardTitle>
                   </CardHeader>
                   <CardContent>
                     <div className="flex items-center gap-2">
-                      <GraduationCap className="h-5 w-5 text-primary" />
-                      <span className="text-2xl font-bold text-text-primary">{student.graduation_year}</span>
+                      <Award className="h-5 w-5 text-primary" />
+                      <span className="text-2xl font-bold text-text-primary">
+                        {student.sat_score || "N/A"}
+                      </span>
                     </div>
                   </CardContent>
                 </Card>
 
                 <Card>
                   <CardHeader className="pb-3">
-                    <CardTitle className="text-sm font-medium text-text-secondary">Application Progress</CardTitle>
+                    <CardTitle className="text-sm font-medium text-text-secondary">ACT Score</CardTitle>
                   </CardHeader>
                   <CardContent>
                     <div className="flex items-center gap-2">
-                      <TrendingUp className="h-5 w-5 text-primary" />
-                      <span className="text-2xl font-bold text-text-primary">{student.application_progress}%</span>
+                      <Award className="h-5 w-5 text-primary" />
+                      <span className="text-2xl font-bold text-text-primary">
+                        {student.act_score || "N/A"}
+                      </span>
                     </div>
                   </CardContent>
                 </Card>
               </div>
             </div>
 
+            {/* Application Progress */}
             <div>
-              <h2 className="text-xl font-semibold text-text-primary mb-4">Contact Information</h2>
+              <h2 className="text-xl font-semibold text-text-primary mb-4">Application Progress</h2>
               <Card>
                 <CardContent className="pt-6">
                   <div className="space-y-4">
-                    <div className="flex items-center gap-3">
-                      <Mail className="h-5 w-5 text-primary" />
-                      <div>
-                        <p className="text-sm text-text-secondary">Email</p>
-                        <p className="text-text-primary">{student.email}</p>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <TrendingUp className="h-5 w-5 text-primary" />
+                        <span className="font-semibold text-text-primary">Overall Progress</span>
                       </div>
+                      <span className="text-2xl font-bold text-text-primary">
+                        {student.application_progress}%
+                      </span>
                     </div>
+                    <Progress value={student.application_progress} className="h-3" />
                   </div>
                 </CardContent>
               </Card>
+            </div>
+
+            {/* Documents & Files */}
+            <div>
+              <h2 className="text-xl font-semibold text-text-primary mb-4">Documents & Files</h2>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <Card>
+                  <CardContent className="pt-6">
+                    <div className="flex flex-col items-center text-center space-y-3">
+                      <div className={`rounded-full p-3 ${student.profile_picture_url ? 'bg-green-100' : 'bg-gray-100'}`}>
+                        <Image className={`h-6 w-6 ${student.profile_picture_url ? 'text-green-600' : 'text-gray-400'}`} />
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium text-text-primary mb-1">Profile Picture</p>
+                        {student.profile_picture_url ? (
+                          <a
+                            href={student.profile_picture_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-xs text-primary hover:underline"
+                          >
+                            View Photo
+                          </a>
+                        ) : (
+                          <p className="text-xs text-text-secondary">Not uploaded</p>
+                        )}
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardContent className="pt-6">
+                    <div className="flex flex-col items-center text-center space-y-3">
+                      <div className={`rounded-full p-3 ${student.resume_url ? 'bg-blue-100' : 'bg-gray-100'}`}>
+                        <FileText className={`h-6 w-6 ${student.resume_url ? 'text-blue-600' : 'text-gray-400'}`} />
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium text-text-primary mb-1">Resume</p>
+                        {student.resume_url ? (
+                          <a
+                            href={student.resume_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-xs text-primary hover:underline"
+                          >
+                            View Resume
+                          </a>
+                        ) : (
+                          <p className="text-xs text-text-secondary">Not uploaded</p>
+                        )}
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardContent className="pt-6">
+                    <div className="flex flex-col items-center text-center space-y-3">
+                      <div className={`rounded-full p-3 ${student.transcript_url ? 'bg-purple-100' : 'bg-gray-100'}`}>
+                        <FileText className={`h-6 w-6 ${student.transcript_url ? 'text-purple-600' : 'text-gray-400'}`} />
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium text-text-primary mb-1">Transcript</p>
+                        {student.transcript_url ? (
+                          <a
+                            href={student.transcript_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-xs text-primary hover:underline"
+                          >
+                            View Transcript
+                          </a>
+                        ) : (
+                          <p className="text-xs text-text-secondary">Not uploaded</p>
+                        )}
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
             </div>
           </div>
         )}
