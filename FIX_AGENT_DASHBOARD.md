@@ -73,6 +73,13 @@ CREATE INDEX IF NOT EXISTS idx_agent_runs_counselor_created ON agent_runs(counse
 CREATE INDEX IF NOT EXISTS idx_agent_runs_type_status ON agent_runs(run_type, status);
 CREATE INDEX IF NOT EXISTS idx_agent_insights_counselor_active ON agent_insights(counselor_id, status, created_at DESC) WHERE status = 'active';
 
+-- Add foreign key relationship
+ALTER TABLE agent_insights
+ADD CONSTRAINT agent_insights_agent_run_id_fkey
+FOREIGN KEY (agent_run_id)
+REFERENCES agent_runs(id)
+ON DELETE SET NULL;
+
 -- IMPORTANT: Disable RLS for demo mode
 ALTER TABLE agent_config DISABLE ROW LEVEL SECURITY;
 ALTER TABLE agent_runs DISABLE ROW LEVEL SECURITY;
