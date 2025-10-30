@@ -27,27 +27,10 @@ export async function GET(
       return NextResponse.json({ error: "Conversation ID is required" }, { status: 400 });
     }
 
-    console.log("Creating Supabase client...");
-    let supabase;
-    try {
-      supabase = await createClient();
-      console.log("Supabase client created");
-    } catch (clientError) {
-      console.error("Error creating Supabase client:", clientError);
-      return NextResponse.json(
-        { error: "Failed to initialize database connection", details: clientError instanceof Error ? clientError.message : String(clientError) },
-        { status: 500 }
-      );
-    }
-
-    console.log("Getting user...");
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-    console.log("User:", user?.id, "Auth error:", authError);
-
-    if (authError || !user) {
-      console.error("Auth failed:", authError);
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    // Demo mode: Use admin client to bypass RLS
+    const supabase = createAdminClient();
+    const userId = DEMO_USER_ID;
+    console.log("Using demo user ID:", userId);
 
     console.log("Querying conversation...");
     // Verify conversation belongs to user
