@@ -18,3 +18,4 @@ WHERE table_schema = 'public'
 AND table_name IN ('users', 'students', 'tasks', 'colleges', 'essays')
 ORDER BY table_name, ordinal_position;
 
+

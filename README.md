@@ -183,3 +183,4 @@ The application is configured for deployment on Vercel:
 
 Private project - All rights reserved
 
+

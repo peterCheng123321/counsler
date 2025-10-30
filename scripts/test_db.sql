@@ -29,3 +29,4 @@ WHERE schemaname = 'public'
 AND tablename = 'students'
 LIMIT 10;
 
+

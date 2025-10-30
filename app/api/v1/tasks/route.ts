@@ -47,18 +47,11 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ data: cached, success: true });
     }
 
+    // For demo purposes: Allow all users to access all mock data
+    // Remove counselor_id filter to show all tasks in database
     let query = supabase
       .from("tasks")
-      .select(`
-        *,
-        students (
-          id,
-          first_name,
-          last_name,
-          email
-        )
-      `)
-      .eq("counselor_id", user.id)
+      .select("*")
       .order("due_date", { ascending: true })
       .order("due_time", { ascending: true, nullsFirst: false });
 
@@ -82,24 +75,62 @@ export async function GET(request: NextRequest) {
       query = query.lte("due_date", dueDateTo);
     }
 
-    const { data, error } = await query;
+    const { data: tasks, error } = await query;
 
     if (error) {
-      console.error("Database error:", error);
+      console.error("Tasks query error:", error);
       return NextResponse.json(
-        { error: "Failed to fetch tasks" },
+        {
+          error: "Failed to fetch tasks",
+          details: error.message,
+          code: error.code,
+          hint: error.hint
+        },
         { status: 500 }
       );
     }
 
-    // Cache the result
-    queryCache.set(user.id, "tasks", data || [], cacheKey);
+    // Fetch students for tasks that have student_id
+    const studentIds = (tasks || [])
+      .map(task => task.student_id)
+      .filter((id): id is string => id !== null && id !== undefined);
+    
+    let studentsMap: Record<string, any> = {};
+    if (studentIds.length > 0) {
+      // For demo: Fetch all students, not just ones matching counselor_id
+      const { data: students, error: studentsError } = await supabase
+        .from("students")
+        .select("id, first_name, last_name, email")
+        .in("id", studentIds);
+      
+      if (!studentsError && students) {
+        studentsMap = students.reduce((acc, student) => {
+          acc[student.id] = student;
+          return acc;
+        }, {} as Record<string, any>);
+      }
+    }
 
-    return NextResponse.json({ data: data || [], success: true });
+    // Combine tasks with student data
+    const tasksWithStudents = (tasks || []).map(task => ({
+      ...task,
+      students: task.student_id ? studentsMap[task.student_id] || null : null,
+    }));
+
+    // For demo purposes, all users can access any data in the database
+    // Mock data should already be in DB, so we return what we found
+
+    // Cache the result
+    queryCache.set(user.id, "tasks", tasksWithStudents, cacheKey);
+
+    return NextResponse.json({ data: tasksWithStudents, success: true });
   } catch (error) {
-    console.error("Unexpected error:", error);
+    console.error("Unexpected error in GET tasks:", error);
     return NextResponse.json(
-      { error: "Internal server error" },
+      {
+        error: "Internal server error",
+        details: error instanceof Error ? error.message : String(error)
+      },
       { status: 500 }
     );
   }
@@ -120,7 +151,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const validatedData = taskSchema.parse(body);
 
-    const { data, error } = await supabase
+    const { data: task, error } = await supabase
       .from("tasks")
       .insert({
         counselor_id: user.id,
@@ -134,29 +165,41 @@ export async function POST(request: NextRequest) {
         reminder_1hour: validatedData.reminder1hour,
         reminder_15min: validatedData.reminder15min,
       })
-      .select(`
-        *,
-        students (
-          id,
-          first_name,
-          last_name,
-          email
-        )
-      `)
+      .select("*")
       .single();
 
     if (error) {
-      console.error("Database error:", error);
+      console.error("Error creating task:", error);
       return NextResponse.json(
-        { error: "Failed to create task" },
+        { error: "Failed to create task", details: error.message },
         { status: 500 }
       );
     }
 
+    // Fetch student data if task has student_id
+    let student = null;
+    if (task.student_id) {
+      const { data: studentData } = await supabase
+        .from("students")
+        .select("id, first_name, last_name, email")
+        .eq("id", task.student_id)
+        .eq("counselor_id", user.id)
+        .single();
+      
+      if (studentData) {
+        student = studentData;
+      }
+    }
+
+    const taskWithStudent = {
+      ...task,
+      students: student,
+    };
+
     // Invalidate cache
     queryCache.invalidateUser(user.id);
 
-    return NextResponse.json({ data, success: true }, { status: 201 });
+    return NextResponse.json({ data: taskWithStudent, success: true }, { status: 201 });
   } catch (error) {
     if (error instanceof z.ZodError) {
       return NextResponse.json(
@@ -164,7 +207,6 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       );
     }
-    console.error("Unexpected error:", error);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }

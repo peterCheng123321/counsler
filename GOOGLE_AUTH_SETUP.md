@@ -1,75 +1,168 @@
-# Google OAuth Setup Guide
+# Google OAuth Setup Guide - Complete Configuration
 
-## Problem: Redirecting to localhost instead of Vercel URL
+## Understanding the OAuth Flow
 
-The code automatically uses `window.location.origin`, which will be your Vercel URL in production. However, Supabase validates redirect URLs against its configured list.
+The OAuth flow works like this:
+1. User clicks "Continue with Google" → App redirects to **Supabase OAuth endpoint**
+2. Supabase redirects to **Google OAuth**
+3. Google redirects back to **Supabase's callback URL** (`https://{project-ref}.supabase.co/auth/v1/callback`)
+4. Supabase processes the OAuth and redirects to **YOUR app's callback URL** (`/auth/callback`)
+5. Your app processes the code and creates a session
 
-## Solution: Configure Supabase Dashboard
+## Step-by-Step Configuration
 
-### Step 1: Get Your Vercel URLs
+### Step 1: Get Your URLs
 
-Your current production URLs:
-- `https://consuler-ixqbi92ml-petercheng123321s-projects.vercel.app`
-- `https://consuler-ibx0y0u0n-petercheng123321s-projects.vercel.app`
-- `https://consuler-9l7l2fjzd-petercheng123321s-projects.vercel.app`
+**Your Vercel Production URLs:**
+- Main: `https://consuler-git-main-petercheng123321s-projects.vercel.app`
+- Preview URLs: Check Vercel dashboard for preview deployments
 
-(Check your Vercel dashboard for the latest production URL)
+**Your Supabase Project:**
+- Go to Supabase Dashboard → Settings → API
+- Find your **Project URL**: `https://{project-ref}.supabase.co`
 
-### Step 2: Configure Supabase Redirect URLs
+### Step 2: Configure Supabase Dashboard
+
+#### A. Site URL Configuration
 
 1. Go to **Supabase Dashboard** → **Authentication** → **URL Configuration**
-2. Add these **Redirect URLs**:
+2. Set **Site URL** to your main production URL:
    ```
-   https://consuler-ixqbi92ml-petercheng123321s-projects.vercel.app/auth/callback
-   https://consuler-ibx0y0u0n-petercheng123321s-projects.vercel.app/auth/callback
-   https://consuler-9l7l2fjzd-petercheng123321s-projects.vercel.app/auth/callback
-   http://localhost:3000/auth/callback
+   https://consuler-git-main-petercheng123321s-projects.vercel.app
    ```
 
-3. Go to **Authentication** → **Providers** → **Google**
-4. Enable Google provider
-5. Add the same redirect URLs in the **Authorized redirect URIs** section
+#### B. Redirect URLs (Where Supabase redirects AFTER OAuth)
+
+In the same **URL Configuration** section, add these **Redirect URLs**:
+
+```
+https://consuler-git-main-petercheng123321s-projects.vercel.app/auth/callback
+http://localhost:3000/auth/callback
+```
+
+**Important:** If you have preview deployments, you can add them too, OR use a wildcard pattern (if Supabase supports it):
+```
+https://consuler-*-petercheng123321s-projects.vercel.app/auth/callback
+```
+
+#### C. Configure Google Provider
+
+1. Go to **Supabase Dashboard** → **Authentication** → **Providers** → **Google**
+2. **Enable** the Google provider
+3. You'll need to add **Client ID** and **Client Secret** from Google Cloud Console (see Step 3 below)
 
 ### Step 3: Configure Google Cloud Console
 
+**IMPORTANT:** Google Cloud Console needs **Supabase's callback URL**, NOT your app's callback URL!
+
 1. Go to [Google Cloud Console](https://console.cloud.google.com/)
 2. Navigate to **APIs & Services** → **Credentials**
-3. Create **OAuth 2.0 Client ID** (or edit existing)
+3. Create or select your **OAuth 2.0 Client ID**
 4. Add **Authorized redirect URIs**:
    ```
-   https://consuler-ixqbi92ml-petercheng123321s-projects.vercel.app/auth/callback
-   https://consuler-ibx0y0u0n-petercheng123321s-projects.vercel.app/auth/callback
-   https://consuler-9l7l2fjzd-petercheng123321s-projects.vercel.app/auth/callback
-   http://localhost:3000/auth/callback
+   https://{your-project-ref}.supabase.co/auth/v1/callback
    ```
-5. Copy **Client ID** and **Client Secret** to Supabase Google provider settings
+   
+   **Example:**
+   ```
+   https://abcdefghijklmnop.supabase.co/auth/v1/callback
+   ```
+   
+   Replace `{your-project-ref}` with your actual Supabase project reference (found in Supabase Dashboard → Settings → API → Project URL)
+
+5. Copy the **Client ID** and **Client Secret**
+6. Paste them into **Supabase Dashboard** → **Authentication** → **Providers** → **Google**
 
 ### Step 4: Verify Configuration
 
-1. Open browser console (F12) on your Vercel site
-2. Click "Continue with Google"
-3. Check the console logs - you should see:
-   - `OAuth redirect URL: https://your-vercel-url/auth/callback`
-   - `Supabase redirect URL: https://...` (should match your Vercel URL)
+1. **Check Supabase Site URL:**
+   - Should be: `https://consuler-git-main-petercheng123321s-projects.vercel.app`
 
-If you see `localhost` in the logs, there's a code issue. If you see the Vercel URL but still get redirected to localhost, it's a Supabase configuration issue.
+2. **Check Supabase Redirect URLs:**
+   - Should include: `https://consuler-git-main-petercheng123321s-projects.vercel.app/auth/callback`
+   - Should include: `http://localhost:3000/auth/callback`
 
-## Debugging
+3. **Check Google Cloud Console Redirect URIs:**
+   - Should be: `https://{project-ref}.supabase.co/auth/v1/callback`
+   - **NOT** your app's callback URL!
 
-Check browser console for:
-- `OAuth redirect URL:` - Should show Vercel URL in production
-- `Supabase redirect URL:` - Should show Supabase OAuth URL with your callback
+4. **Test the Flow:**
+   - Open your Vercel site
+   - Open browser console (F12)
+   - Click "Continue with Google"
+   - Check console logs:
+     - `OAuth redirect URL:` should show your Vercel URL
+     - `Supabase redirect URL:` should show Supabase's OAuth URL
 
-If redirects still go to localhost:
-1. Clear browser cache and cookies
-2. Verify Supabase redirect URLs match exactly (including https/http)
-3. Check that Google OAuth credentials have the correct redirect URIs
+## Common Issues & Solutions
 
-## Automatic Detection
+### Issue: "Redirect URI mismatch"
+
+**Symptoms:** Google shows an error about redirect URI not matching
+
+**Solution:**
+- Make sure Google Cloud Console has **Supabase's callback URL** (`https://{project-ref}.supabase.co/auth/v1/callback`)
+- Do NOT add your app's callback URL to Google Cloud Console
+
+### Issue: "Redirect URL not allowed"
+
+**Symptoms:** Supabase error about redirect URL not being in allowed list
+
+**Solution:**
+- Add your app's callback URL to Supabase Dashboard → Authentication → URL Configuration → Redirect URLs
+- Make sure it matches exactly (including `https://` vs `http://`)
+
+### Issue: Multiple Preview Deployments
+
+**Problem:** Vercel creates new URLs for each preview deployment
+
+**Solutions:**
+
+**Option 1: Add Each Preview URL**
+- Add each preview URL to Supabase Redirect URLs as they're created
+- Not ideal for many previews
+
+**Option 2: Use Custom Domain (Recommended)**
+- Set up a custom domain in Vercel
+- Use one stable URL for production
+- Add only that URL to Supabase
+
+**Option 3: Use Environment-Specific Configuration**
+- Have different Supabase projects for dev/staging/prod
+- Or use Supabase's wildcard support if available
+
+## Code Configuration
 
 The code automatically detects the current domain:
-- `window.location.origin` = Vercel URL on production
-- `window.location.origin` = `http://localhost:3000` in development
+- In production: Uses `window.location.origin` (your Vercel URL)
+- In development: Uses `http://localhost:3000`
 
 No code changes needed - just ensure Supabase is configured correctly!
 
+## Testing Checklist
+
+- [ ] Site URL set in Supabase Dashboard
+- [ ] Redirect URLs added in Supabase Dashboard (including `/auth/callback`)
+- [ ] Google provider enabled in Supabase
+- [ ] Google Cloud Console has Supabase callback URL (`https://{project-ref}.supabase.co/auth/v1/callback`)
+- [ ] Client ID and Secret configured in Supabase
+- [ ] Test login flow works on production
+- [ ] Test login flow works on localhost
+
+## Quick Reference
+
+**Supabase Redirect URLs (where Supabase redirects TO):**
+```
+https://consuler-git-main-petercheng123321s-projects.vercel.app/auth/callback
+http://localhost:3000/auth/callback
+```
+
+**Google Cloud Console Redirect URI (where Google redirects TO):**
+```
+https://{your-project-ref}.supabase.co/auth/v1/callback
+```
+
+**Flow Diagram:**
+```
+App → Supabase OAuth → Google OAuth → Supabase Callback → App Callback (/auth/callback)
+```

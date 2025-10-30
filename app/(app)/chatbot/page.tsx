@@ -50,31 +50,37 @@ export default function ChatbotPage() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [isTyping, setIsTyping] = useState(false);
+  const [isUsingTools, setIsUsingTools] = useState(false);
   const [selectedConversation, setSelectedConversation] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   // Load conversation messages when conversation is selected
-  const { data: conversationData } = useQuery({
+  const { data: conversationData, isLoading: isLoadingConversation } = useQuery({
     queryKey: ["conversation", selectedConversation],
     queryFn: () => apiClient.getConversation(selectedConversation!),
     enabled: !!selectedConversation,
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
+    staleTime: 2 * 60 * 1000, // 2 minutes - conversation data doesn't change often
+    gcTime: 5 * 60 * 1000, // Keep in cache for 5 minutes
   });
 
   // Update messages when conversation data loads
   useEffect(() => {
-    if (conversationData?.data?.messages) {
-      const loadedMessages: Message[] = conversationData.data.messages.map(
-        (msg: APIMessage) => ({
+    if (conversationData?.success && conversationData?.data?.messages) {
+      const loadedMessages: Message[] = conversationData.data.messages
+        .filter((msg: APIMessage) => msg.role === "user" || msg.role === "assistant")
+        .map((msg: APIMessage) => ({
           id: msg.id,
-          role: msg.role,
-          content: msg.content,
+          role: msg.role as "user" | "assistant",
+          content: msg.content || "",
           timestamp: new Date(msg.created_at),
-        })
-      );
+        }));
       setMessages(loadedMessages);
+    } else if (conversationData?.success && Array.isArray(conversationData?.data?.messages) && conversationData.data.messages.length === 0) {
+      setMessages([]);
     } else if (!selectedConversation) {
-      // Clear messages when no conversation is selected
       setMessages([]);
     }
   }, [conversationData, selectedConversation]);
@@ -135,60 +141,88 @@ export default function ChatbotPage() {
         let buffer = "";
         let conversationId: string | null = null;
 
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
+        try {
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
 
-          buffer += decoder.decode(value, { stream: true });
-          const lines = buffer.split("\n");
-          buffer = lines.pop() || "";
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split("\n");
+            buffer = lines.pop() || "";
 
-          for (const line of lines) {
-            if (line.startsWith("data: ")) {
-              try {
-                const data = JSON.parse(line.slice(6));
-                
-                if (data.type === "token" && data.content) {
-                  setMessages((prev) =>
-                    prev.map((msg) =>
-                      msg.id === aiMessageId
-                        ? { ...msg, content: msg.content + data.content }
-                        : msg
-                    )
-                  );
-                } else if (data.type === "tool_call") {
-                  // Tool call indicator - could show loading state
-                  console.log("Tool call:", data.toolCall);
-                } else if (data.type === "done") {
-                  conversationId = data.conversationId || null;
-                  setIsTyping(false);
-                } else if (data.type === "error") {
-                  throw new Error(data.error || "Unknown error");
+            for (const line of lines) {
+              if (line.startsWith("data: ")) {
+                try {
+                  const data = JSON.parse(line.slice(6));
+
+                  if (data.type === "token" && data.content) {
+                    setIsUsingTools(false); // Clear tool state when content arrives
+                    setMessages((prev) =>
+                      prev.map((msg) =>
+                        msg.id === aiMessageId
+                          ? { ...msg, content: (msg.content || "") + data.content }
+                          : msg
+                      )
+                    );
+                  } else if (data.type === "tool_call") {
+                    // Tool call detected - show loading animation
+                    console.log("Tool call:", data.toolCall);
+                    setIsUsingTools(true);
+                    setIsTyping(true);
+                  } else if (data.type === "done") {
+                    conversationId = data.conversationId || null;
+                    setIsTyping(false);
+                    setIsUsingTools(false);
+                    
+                    // Clean up any placeholder text that might have leaked through
+                    setMessages((prev) =>
+                      prev.map((msg) => {
+                        if (msg.id === aiMessageId) {
+                          let cleanedContent = msg.content || "";
+                          // Remove any placeholder patterns
+                          cleanedContent = cleanedContent.replace(/\n\n_Using tools\.\.\._\n\n/g, "");
+                          cleanedContent = cleanedContent.replace(/\n\n_Processing\.\.\._\n\n/g, "");
+                          cleanedContent = cleanedContent.replace(/I've processed your request using the available tools\. The results have been retrieved\./g, "");
+                          
+                          // Only show fallback if truly empty
+                          if (!cleanedContent.trim()) {
+                            cleanedContent = "I've processed your request, but no response was generated. Please try again.";
+                          }
+                          
+                          return { ...msg, content: cleanedContent };
+                        }
+                        return msg;
+                      })
+                    );
+                  } else if (data.type === "error") {
+                    throw new Error(data.error || "Unknown error");
+                  }
+                } catch (parseError) {
+                  console.error("Error parsing SSE data:", parseError);
                 }
-              } catch (parseError) {
-                console.error("Error parsing SSE data:", parseError);
               }
             }
           }
+        } catch (streamError) {
+          throw new Error(streamError instanceof Error ? streamError.message : "Stream error occurred");
         }
 
         // Update conversation ID if new conversation was created
         if (conversationId && !selectedConversation) {
           setSelectedConversation(conversationId);
+          // Only invalidate conversations list when new conversation is created
+          queryClient.invalidateQueries({ queryKey: ["conversations"] });
         }
-
-        // Invalidate queries to refresh conversation list
-        queryClient.invalidateQueries({ queryKey: ["conversations"] });
-        if (selectedConversation || conversationId) {
-          queryClient.invalidateQueries({
-            queryKey: ["conversation", selectedConversation || conversationId],
-          });
-        }
+        
+        // Don't invalidate current conversation - messages are already updated via streaming
+        // The conversation query will refresh naturally when staleTime expires
       } else {
         // Fallback to non-streaming
         if (response.success && response.data) {
           if (response.data.conversationId && !selectedConversation) {
             setSelectedConversation(response.data.conversationId);
+            // Only invalidate conversations list when new conversation is created
+            queryClient.invalidateQueries({ queryKey: ["conversations"] });
           }
 
           setMessages((prev) =>
@@ -199,12 +233,7 @@ export default function ChatbotPage() {
             )
           );
 
-          queryClient.invalidateQueries({ queryKey: ["conversations"] });
-          if (selectedConversation || response.data.conversationId) {
-            queryClient.invalidateQueries({
-              queryKey: ["conversation", selectedConversation || response.data.conversationId],
-            });
-          }
+          // Don't invalidate current conversation - messages are already updated in UI
         } else {
           throw new Error(response.error || "Failed to get response");
         }
@@ -212,11 +241,13 @@ export default function ChatbotPage() {
     } catch (error) {
       console.error("Chat error:", error);
       let errorMessage = "Sorry, I encountered an error. Please try again.";
-      
+
       if (error instanceof Error) {
-        errorMessage = `Sorry, I encountered an error: ${error.message}. Please try again.`;
+        errorMessage = `Error: ${error.message}`;
       } else if (typeof error === "string") {
-        errorMessage = `Sorry, I encountered an error: ${error}. Please try again.`;
+        errorMessage = `Error: ${error}`;
+      } else if (error && typeof error === "object") {
+        errorMessage = `Error: ${JSON.stringify(error)}`;
       }
 
       setMessages((prev) =>
@@ -251,46 +282,82 @@ export default function ChatbotPage() {
   return (
     <div className="flex h-[calc(100vh-8rem)] gap-4 overflow-hidden">
       {/* Chat History Sidebar */}
-      <ChatHistory
-        selectedConversation={selectedConversation}
-        onSelectConversation={setSelectedConversation}
-        onNewChat={handleNewChat}
-      />
+      <div className="transition-all duration-300 ease-in-out">
+        <ChatHistory
+          selectedConversation={selectedConversation}
+          onSelectConversation={setSelectedConversation}
+          onNewChat={handleNewChat}
+        />
+      </div>
 
       {/* Chat Area */}
-      <div className="flex flex-1 flex-col min-w-0">
+      <div className="flex flex-1 flex-col min-w-0 transition-all duration-300 ease-in-out">
         {/* Messages Area */}
         <div className="flex-1 overflow-y-auto p-6 md:p-8 lg:p-12">
           <div className="mx-auto max-w-4xl space-y-6">
             {messages.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-16 md:py-24">
-                <div className="mb-8 rounded-full bg-gradient-to-br from-primary/20 to-primary/10 p-6 backdrop-blur-sm animate-pulse">
-                  <Sparkles className="h-10 w-10 text-primary" />
+              <div className="flex flex-col items-center justify-center py-16 md:py-24 transition-all duration-500 ease-in-out">
+                <div className="mb-8 rounded-full bg-gradient-to-br from-primary/30 via-primary/20 to-primary/10 p-6 backdrop-blur-sm animate-pulse shadow-lg shadow-primary/10 transition-all duration-500 ease-in-out hover:scale-110 hover:shadow-xl hover:shadow-primary/20">
+                  <Sparkles className="h-10 w-10 text-primary transition-all duration-500 ease-in-out" />
                 </div>
-                <h2 className="text-2xl md:text-3xl font-bold mb-3 text-heading-1">
+                <h2 className="text-2xl md:text-3xl font-bold mb-3 text-heading-1 transition-all duration-500 ease-in-out animate-fade-in">
                   How can I help you today?
                 </h2>
-                <p className="text-base md:text-lg text-text-secondary mb-10 text-center max-w-lg">
+                <p className="text-base md:text-lg text-text-secondary mb-10 text-center max-w-lg transition-all duration-500 ease-in-out animate-fade-in" style={{ animationDelay: '0.1s' }}>
                   Ask me about students, deadlines, or generate a Letter of Recommendation.
                 </p>
-                <SuggestionChips
-                  suggestions={welcomeSuggestions}
-                  onSuggestionClick={handleSuggestionClick}
-                />
+                <div className="transition-all duration-500 ease-in-out animate-fade-in" style={{ animationDelay: '0.2s' }}>
+                  <SuggestionChips
+                    suggestions={welcomeSuggestions}
+                    onSuggestionClick={handleSuggestionClick}
+                  />
+                </div>
               </div>
             ) : (
               <>
-                {messages.map((message) => (
-                  <ChatMessage key={message.id} message={message} />
-                ))}
-                {isTyping && (
-                  <div className="flex items-center gap-3 text-text-tertiary animate-fade-in">
-                    <div className="flex gap-1.5">
-                      <div className="h-2.5 w-2.5 animate-bounce rounded-full bg-primary [animation-delay:-0.3s]" />
-                      <div className="h-2.5 w-2.5 animate-bounce rounded-full bg-primary [animation-delay:-0.15s]" />
-                      <div className="h-2.5 w-2.5 animate-bounce rounded-full bg-primary" />
+                {isLoadingConversation ? (
+                  <div className="flex flex-col items-center justify-center py-12 space-y-4 animate-fade-in">
+                    <div className="flex gap-2">
+                      <div className="h-3 w-3 animate-bounce rounded-full bg-primary/60 transition-all duration-300 [animation-delay:-0.3s]" />
+                      <div className="h-3 w-3 animate-bounce rounded-full bg-primary transition-all duration-300 [animation-delay:-0.15s]" />
+                      <div className="h-3 w-3 animate-bounce rounded-full bg-primary/60 transition-all duration-300" />
                     </div>
-                    <span className="text-sm font-medium">AI is thinking...</span>
+                    <p className="text-sm text-text-tertiary transition-opacity duration-300">Loading conversation...</p>
+                  </div>
+                ) : (
+                  <>
+                    {messages.map((message) => (
+                      <ChatMessage key={message.id} message={message} />
+                    ))}
+                  </>
+                )}
+                {isTyping && (
+                  <div className="flex items-center gap-3 text-text-tertiary animate-fade-in transition-all duration-300 ease-in-out">
+                    {isUsingTools ? (
+                      <>
+                        <div className="flex gap-1.5">
+                          <div className="h-2.5 w-2.5 animate-bounce rounded-full bg-primary/80 transition-all duration-300 [animation-delay:-0.3s]" />
+                          <div className="h-2.5 w-2.5 animate-bounce rounded-full bg-primary transition-all duration-300 [animation-delay:-0.15s]" />
+                          <div className="h-2.5 w-2.5 animate-bounce rounded-full bg-primary/80 transition-all duration-300" />
+                        </div>
+                        <span className="text-sm font-medium transition-opacity duration-300 flex items-center gap-2">
+                          <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                          </svg>
+                          Using tools...
+                        </span>
+                      </>
+                    ) : (
+                      <>
+                        <div className="flex gap-1.5">
+                          <div className="h-2.5 w-2.5 animate-bounce rounded-full bg-primary/80 transition-all duration-300 [animation-delay:-0.3s]" />
+                          <div className="h-2.5 w-2.5 animate-bounce rounded-full bg-primary transition-all duration-300 [animation-delay:-0.15s]" />
+                          <div className="h-2.5 w-2.5 animate-bounce rounded-full bg-primary/80 transition-all duration-300" />
+                        </div>
+                        <span className="text-sm font-medium transition-opacity duration-300">AI is thinking...</span>
+                      </>
+                    )}
                   </div>
                 )}
                 <div ref={messagesEndRef} />
@@ -300,11 +367,11 @@ export default function ChatbotPage() {
         </div>
 
         {/* Input Area */}
-        <div className="border-t border-border/50 bg-gradient-to-t from-background via-background/95 to-background/80 p-5 md:p-6 backdrop-blur-xl shadow-[0_-4px_24px_rgba(0,0,0,0.04)]">
+        <div className="border-t border-border/50 bg-gradient-to-t from-background via-background/95 to-background/80 p-5 md:p-6 backdrop-blur-xl shadow-[0_-4px_24px_rgba(0,0,0,0.04)] transition-all duration-500 ease-in-out">
           <div className="mx-auto max-w-4xl">
-            <div className="flex items-end gap-3 rounded-2xl border-2 border-border/50 bg-surface/80 backdrop-blur-sm p-3 shadow-lg transition-all duration-200 hover:shadow-xl focus-within:border-primary focus-within:shadow-2xl focus-within:shadow-primary/10">
-              <Button variant="ghost" size="icon" className="shrink-0 hover:bg-primary/10 transition-colors">
-                <Paperclip className="h-5 w-5 text-text-secondary" />
+            <div className="flex items-end gap-3 rounded-2xl border-2 border-border/50 bg-surface/80 backdrop-blur-sm p-3 shadow-lg transition-all duration-300 ease-out hover:shadow-xl hover:border-primary/30 focus-within:border-primary focus-within:shadow-2xl focus-within:shadow-primary/20 focus-within:bg-surface/90">
+              <Button variant="ghost" size="icon" className="shrink-0 hover:bg-primary/10 transition-all duration-300 ease-out hover:scale-110">
+                <Paperclip className="h-5 w-5 text-text-secondary transition-colors duration-300" />
               </Button>
               <textarea
                 ref={textareaRef}
@@ -312,7 +379,7 @@ export default function ChatbotPage() {
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={handleKeyDown}
                 placeholder="Ask me anything about students, deadlines, or applications..."
-                className="flex-1 resize-none border-0 bg-transparent p-2 text-sm md:text-base outline-none placeholder:text-text-tertiary/60 focus:placeholder:text-text-tertiary/40 transition-colors"
+                className="flex-1 resize-none border-0 bg-transparent p-2 text-sm md:text-base outline-none placeholder:text-text-tertiary/60 focus:placeholder:text-text-tertiary/40 transition-all duration-300 ease-out"
                 rows={1}
                 style={{ maxHeight: "200px" }}
               />
@@ -320,10 +387,17 @@ export default function ChatbotPage() {
                 onClick={(e) => handleSend(e)}
                 disabled={!input.trim() || isTyping}
                 size="icon"
-                className="shrink-0 h-10 w-10 rounded-xl bg-primary hover:bg-primary-hover shadow-md hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                loading={isTyping}
+                className="shrink-0 h-10 w-10 rounded-xl bg-primary hover:bg-primary-hover shadow-md hover:shadow-lg hover:scale-110 active:scale-95 transition-all duration-300 ease-out disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
               >
-                {!isTyping && <Send className="h-5 w-5" />}
+                {isTyping ? (
+                  <div className="flex gap-0.5">
+                    <div className="h-1.5 w-1.5 animate-bounce rounded-full bg-white [animation-delay:-0.3s]" />
+                    <div className="h-1.5 w-1.5 animate-bounce rounded-full bg-white [animation-delay:-0.15s]" />
+                    <div className="h-1.5 w-1.5 animate-bounce rounded-full bg-white" />
+                  </div>
+                ) : (
+                  <Send className="h-5 w-5" />
+                )}
               </Button>
             </div>
             {messages.length > 0 && !isTyping && (
