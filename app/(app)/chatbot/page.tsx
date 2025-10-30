@@ -1,14 +1,16 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, Suspense } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Plus, Search, Send, Paperclip, Sparkles, Menu } from "lucide-react";
+import { useSearchParams } from "next/navigation";
+import { Send, Paperclip, Sparkles, Menu } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { ChatMessage } from "@/components/chatbot/chat-message";
 import { SuggestionChips } from "@/components/chatbot/suggestion-chips";
 import { ChatHistory } from "@/components/chatbot/chat-history";
+import { AIConfirmationDialog } from "@/components/ai/ai-confirmation-dialog";
 import { apiClient, type Message as APIMessage } from "@/lib/api/client";
+import type { AIAction } from "@/lib/contexts/ai-context";
 
 interface Message {
   id: string;
@@ -45,16 +47,32 @@ const welcomeSuggestions = [
   },
 ];
 
-export default function ChatbotPage() {
+function ChatbotContent() {
   const queryClient = useQueryClient();
+  const searchParams = useSearchParams();
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [isTyping, setIsTyping] = useState(false);
   const [isUsingTools, setIsUsingTools] = useState(false);
   const [selectedConversation, setSelectedConversation] = useState<string | null>(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [pendingAction, setPendingAction] = useState<AIAction | null>(null);
+  const [showConfirmation, setShowConfirmation] = useState(false);
+  const [confirmationMessage, setConfirmationMessage] = useState<string>("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // Pre-fill input from URL query parameter
+  useEffect(() => {
+    const command = searchParams?.get("q");
+    if (command) {
+      setInput(decodeURIComponent(command));
+      // Focus the textarea after a short delay
+      setTimeout(() => {
+        textareaRef.current?.focus();
+      }, 100);
+    }
+  }, [searchParams]);
 
   // Load conversation messages when conversation is selected
   const { data: conversationData, isLoading: isLoadingConversation } = useQuery({
@@ -174,22 +192,44 @@ export default function ChatbotPage() {
                     conversationId = data.conversationId || null;
                     setIsTyping(false);
                     setIsUsingTools(false);
-                    
-                    // Clean up any placeholder text that might have leaked through
+
+                    // Clean up any placeholder text and check for pending actions
                     setMessages((prev) =>
                       prev.map((msg) => {
                         if (msg.id === aiMessageId) {
                           let cleanedContent = msg.content || "";
+
+                          // Check if content contains pending_confirmation action
+                          try {
+                            const pendingMatch = cleanedContent.match(/\{[\s\S]*?"status"\s*:\s*"pending_confirmation"[\s\S]*?\}/);
+                            if (pendingMatch) {
+                              const actionData = JSON.parse(pendingMatch[0]);
+                              setPendingAction({
+                                type: actionData.action?.split('_')[0] as "create" | "update" | "delete" | "generate" | "add",
+                                entity: actionData.entity,
+                                data: actionData.data,
+                                id: actionData.id,
+                              });
+                              setConfirmationMessage(actionData.message || "");
+                              setShowConfirmation(true);
+
+                              // Remove JSON from content, keep the message
+                              cleanedContent = actionData.message || cleanedContent.replace(pendingMatch[0], "");
+                            }
+                          } catch (e) {
+                            // Not a JSON action, continue
+                          }
+
                           // Remove any placeholder patterns
                           cleanedContent = cleanedContent.replace(/\n\n_Using tools\.\.\._\n\n/g, "");
                           cleanedContent = cleanedContent.replace(/\n\n_Processing\.\.\._\n\n/g, "");
                           cleanedContent = cleanedContent.replace(/I've processed your request using the available tools\. The results have been retrieved\./g, "");
-                          
+
                           // Only show fallback if truly empty
                           if (!cleanedContent.trim()) {
                             cleanedContent = "I've processed your request, but no response was generated. Please try again.";
                           }
-                          
+
                           return { ...msg, content: cleanedContent };
                         }
                         return msg;
@@ -282,21 +322,6 @@ export default function ChatbotPage() {
 
   return (
     <div className="flex h-[calc(100vh-8rem)] overflow-hidden relative">
-      {/* Chat History Sidebar */}
-      <ChatHistory
-        selectedConversation={selectedConversation}
-        onSelectConversation={(id) => {
-          setSelectedConversation(id);
-          setIsSidebarOpen(false); // Close sidebar on mobile when conversation selected
-        }}
-        onNewChat={() => {
-          handleNewChat();
-          setIsSidebarOpen(false); // Close sidebar on mobile when new chat
-        }}
-        isOpen={isSidebarOpen}
-        onClose={() => setIsSidebarOpen(false)}
-      />
-
       {/* Chat Area */}
       <div className="flex flex-1 flex-col min-w-0">
         {/* Mobile Header with Menu Button */}
@@ -318,16 +343,16 @@ export default function ChatbotPage() {
           <div className="mx-auto max-w-4xl space-y-6">
             {messages.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-16 md:py-24 transition-all duration-500 ease-in-out">
-                <div className="mb-8 rounded-full bg-gradient-to-br from-primary/30 via-primary/20 to-primary/10 p-6 backdrop-blur-sm animate-pulse shadow-lg shadow-primary/10 transition-all duration-500 ease-in-out hover:scale-110 hover:shadow-xl hover:shadow-primary/20">
-                  <Sparkles className="h-10 w-10 text-primary transition-all duration-500 ease-in-out" />
+                <div className="mb-8 rounded-full bg-gradient-to-br from-primary/30 via-primary/20 to-primary/10 p-8 backdrop-blur-sm animate-pulse shadow-lg shadow-primary/10 transition-all duration-500 ease-in-out hover:scale-110 hover:shadow-xl hover:shadow-primary/20">
+                  <Sparkles className="h-12 w-12 text-primary transition-all duration-500 ease-in-out" />
                 </div>
-                <h2 className="text-2xl md:text-3xl font-bold mb-3 text-heading-1 transition-all duration-500 ease-in-out animate-fade-in">
+                <h2 className="text-4xl md:text-5xl font-bold mb-4 text-heading-1 transition-all duration-500 ease-in-out animate-fade-in text-center">
                   How can I help you today?
                 </h2>
-                <p className="text-base md:text-lg text-text-secondary mb-10 text-center max-w-lg transition-all duration-500 ease-in-out animate-fade-in" style={{ animationDelay: '0.1s' }}>
-                  Ask me about students, deadlines, or generate a Letter of Recommendation.
+                <p className="text-lg md:text-xl text-text-secondary mb-12 text-center max-w-2xl transition-all duration-500 ease-in-out animate-fade-in font-medium" style={{ animationDelay: '0.1s' }}>
+                  Ask me about students, deadlines, applications, or generate a Letter of Recommendation
                 </p>
-                <div className="transition-all duration-500 ease-in-out animate-fade-in" style={{ animationDelay: '0.2s' }}>
+                <div className="transition-all duration-500 ease-in-out animate-fade-in w-full max-w-4xl px-4" style={{ animationDelay: '0.2s' }}>
                   <SuggestionChips
                     suggestions={welcomeSuggestions}
                     onSuggestionClick={handleSuggestionClick}
@@ -394,7 +419,7 @@ export default function ChatbotPage() {
         {/* Input Area */}
         <div className="border-t border-border/50 bg-gradient-to-t from-background via-background/95 to-background/80 p-5 md:p-6 backdrop-blur-xl shadow-[0_-4px_24px_rgba(0,0,0,0.04)] transition-all duration-500 ease-in-out">
           <div className="mx-auto max-w-4xl">
-            <div className="flex items-end gap-3 rounded-2xl border-2 border-border/50 bg-surface/80 backdrop-blur-sm p-3 shadow-lg transition-all duration-300 ease-out hover:shadow-xl hover:border-primary/30 focus-within:border-primary focus-within:shadow-2xl focus-within:shadow-primary/20 focus-within:bg-surface/90">
+            <div className="flex items-end gap-3 rounded-2xl border-2 border-border/50 bg-surface/80 backdrop-blur-sm p-4 shadow-lg transition-all duration-300 ease-out hover:shadow-xl hover:border-primary/30 focus-within:border-primary focus-within:shadow-2xl focus-within:shadow-primary/20 focus-within:bg-surface/90">
               <Button variant="ghost" size="icon" className="shrink-0 hover:bg-primary/10 transition-all duration-300 ease-out hover:scale-110">
                 <Paperclip className="h-5 w-5 text-text-secondary transition-colors duration-300" />
               </Button>
@@ -403,7 +428,7 @@ export default function ChatbotPage() {
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={handleKeyDown}
-                placeholder="Ask me anything about students, deadlines, or applications..."
+                placeholder="Type your question or command here..."
                 className="flex-1 resize-none border-0 bg-transparent p-2 text-sm md:text-base outline-none placeholder:text-text-tertiary/60 focus:placeholder:text-text-tertiary/40 transition-all duration-300 ease-out"
                 rows={1}
                 style={{ maxHeight: "200px" }}
@@ -436,6 +461,52 @@ export default function ChatbotPage() {
           </div>
         </div>
       </div>
+
+      {/* Chat History Sidebar */}
+      <ChatHistory
+        selectedConversation={selectedConversation}
+        onSelectConversation={(id) => {
+          setSelectedConversation(id);
+          setIsSidebarOpen(false); // Close sidebar on mobile when conversation selected
+        }}
+        onNewChat={() => {
+          handleNewChat();
+          setIsSidebarOpen(false); // Close sidebar on mobile when new chat
+        }}
+        isOpen={isSidebarOpen}
+        onClose={() => setIsSidebarOpen(false)}
+      />
+
+      {/* AI Confirmation Dialog */}
+      <AIConfirmationDialog
+        open={showConfirmation}
+        onOpenChange={setShowConfirmation}
+        action={pendingAction}
+        message={confirmationMessage}
+        onSuccess={() => {
+          // Refresh the conversation to show the updated data
+          if (selectedConversation) {
+            queryClient.invalidateQueries({ queryKey: ["conversation", selectedConversation] });
+          }
+          queryClient.invalidateQueries({ queryKey: ["students"] });
+          queryClient.invalidateQueries({ queryKey: ["tasks"] });
+        }}
+      />
     </div>
+  );
+}
+
+export default function ChatbotPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex h-[calc(100vh-8rem)] items-center justify-center">
+        <div className="flex flex-col items-center gap-4">
+          <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent"></div>
+          <p className="text-sm text-muted-foreground">Loading chatbot...</p>
+        </div>
+      </div>
+    }>
+      <ChatbotContent />
+    </Suspense>
   );
 }

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { MessageCircle, Users, CheckSquare, Search, Bell, User } from "lucide-react";
+import { MessageCircle, Users, CheckSquare, Search, Bell, User, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
@@ -22,37 +22,45 @@ const navItems = [
   { href: "/tasks", label: "Tasks", icon: CheckSquare },
 ];
 
-export function Header() {
+interface HeaderProps {
+  onCommandPaletteOpen?: () => void;
+}
+
+export function Header({ onCommandPaletteOpen }: HeaderProps = {}) {
   const pathname = usePathname();
 
   return (
     <header className="sticky top-0 z-50 w-full border-b border-border bg-surface/95 backdrop-blur supports-[backdrop-filter]:bg-surface/60">
-      <div className="container flex h-16 items-center justify-between px-4">
-        {/* Logo */}
-        <Link href="/chatbot" className="flex items-center space-x-2">
-          <div className="flex h-8 w-8 items-center justify-center rounded-md bg-primary text-white font-bold">
+      <div className="container flex h-20 items-center justify-between px-4 gap-4">
+        {/* Logo and Tagline */}
+        <Link href="/chatbot" className="flex items-center space-x-3 hover:opacity-80 transition-opacity">
+          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-gradient-to-br from-primary to-primary-hover text-white font-bold text-lg shadow-md">
             C
           </div>
-          <span className="font-bold text-xl hidden sm:inline-block">CAMP</span>
+          <div className="flex flex-col">
+            <span className="font-bold text-lg hidden sm:inline-block text-text-primary">CAMP</span>
+            <span className="text-xs text-text-tertiary hidden md:inline-block font-medium">College App Management</span>
+          </div>
         </Link>
 
         {/* Navigation */}
-        <nav className="flex items-center space-x-1">
+        <nav className="flex items-center space-x-1 ml-8">
           {navItems.map((item) => {
             const Icon = item.icon;
             const isActive = pathname?.startsWith(item.href);
             return (
               <Link key={item.href} href={item.href}>
                 <Button
-                  variant={isActive ? "secondary" : "ghost"}
+                  variant={isActive ? "default" : "ghost"}
                   className={cn(
-                    "gap-2",
-                    isActive &&
-                      "bg-primary-light border-b-2 border-primary text-primary font-semibold"
+                    "gap-2 transition-all duration-300",
+                    isActive
+                      ? "bg-primary text-white shadow-md hover:bg-primary-hover"
+                      : "text-text-secondary hover:text-text-primary hover:bg-background/50"
                   )}
                 >
                   <Icon className="h-4 w-4" />
-                  <span className="hidden sm:inline">{item.label}</span>
+                  <span className="hidden sm:inline font-medium">{item.label}</span>
                 </Button>
               </Link>
             );
@@ -60,22 +68,38 @@ export function Header() {
         </nav>
 
         {/* Right Side Actions */}
-        <div className="flex items-center space-x-2">
+        <div className="flex items-center space-x-3 ml-auto">
+          {/* AI Command Button */}
+          <Button
+            variant="outline"
+            className="gap-2 border-primary/20 hover:border-primary hover:bg-primary/5 transition-all duration-300"
+            onClick={onCommandPaletteOpen}
+          >
+            <Sparkles className="h-4 w-4 text-primary" />
+            <span className="hidden md:inline font-medium">AI Commands</span>
+            <kbd className="hidden lg:inline-flex h-5 select-none items-center gap-1 rounded border bg-muted px-1.5 font-mono text-[10px] font-medium opacity-100">
+              <span className="text-xs">⌘</span>K
+            </kbd>
+          </Button>
+
           {/* Search */}
-          <div className="relative hidden md:block">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-tertiary" />
+          <div className="relative hidden lg:block">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-tertiary pointer-events-none" />
             <Input
               placeholder="Search students, tasks, colleges..."
-              className="w-[320px] pl-10 focus:w-[400px] transition-all duration-300"
+              className="w-64 pl-10 pr-10 bg-background/50 border-border/50 focus:border-primary focus:bg-background transition-all duration-300 text-sm"
             />
+            <button className="absolute right-3 top-1/2 -translate-y-1/2 text-text-tertiary hover:text-text-primary transition-colors opacity-0 hover:opacity-100" aria-label="Clear search">
+              ✕
+            </button>
           </div>
 
           {/* Notifications */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon" className="relative">
-                <Bell className="h-5 w-5" />
-                <span className="absolute top-1 right-1 h-2 w-2 rounded-full bg-error"></span>
+              <Button variant="ghost" size="icon" className="relative hover:bg-background/50 transition-colors">
+                <Bell className="h-5 w-5 text-text-secondary" />
+                <span className="absolute top-1 right-1 h-2 w-2 rounded-full bg-error animate-pulse"></span>
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-80">
@@ -93,10 +117,10 @@ export function Header() {
           {/* User Menu */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" className="relative h-10 w-10 rounded-full">
+              <Button variant="ghost" className="relative h-10 w-10 rounded-full hover:bg-background/50 transition-colors">
                 <Avatar>
                   <AvatarImage src="" alt="User" />
-                  <AvatarFallback>U</AvatarFallback>
+                  <AvatarFallback className="bg-primary text-white font-semibold">U</AvatarFallback>
                 </Avatar>
               </Button>
             </DropdownMenuTrigger>

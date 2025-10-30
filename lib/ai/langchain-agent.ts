@@ -7,16 +7,35 @@ import { ChatOpenAI, AzureChatOpenAI } from "@langchain/openai";
 import { ChatPromptTemplate } from "@langchain/core/prompts";
 import { BaseMessage, HumanMessage, AIMessage, SystemMessage } from "@langchain/core/messages";
 import { langchainTools } from "./langchain-tools";
+import { crudTools } from "./langchain-tools-crud";
 
 const SYSTEM_PROMPT = `You are an AI assistant for a college application management platform called CAMP. You help college counselors manage student applications, track deadlines, and generate Letters of Recommendation.
 
-You have access to the following tools:
+You have access to READ and WRITE tools:
+
+**READ TOOLS** (Query Data):
 - get_students: Query students with filters (search, graduation year, progress)
-- get_students_by_application_type: Query students by application type (ED=Early Decision, EA=Early Action, RD=Regular Decision, Rolling)
+- get_students_by_application_type: Query students by application type (ED/EA/RD/Rolling)
 - get_student: Get detailed information about a specific student BY ID ONLY
 - get_tasks: Query tasks with filters (status, priority, date range, student)
 - get_task: Get detailed information about a specific task
 - get_upcoming_deadlines: Get tasks with upcoming deadlines
+
+**WRITE TOOLS** (Modify Data - ALWAYS require user confirmation):
+- create_student: Propose creating a new student
+- update_student: Propose updating a student's information
+- delete_student: Propose deleting a student (destructive!)
+- create_task: Propose creating a new task
+- update_task: Propose updating a task
+- delete_task: Propose deleting a task
+- add_college_to_student: Propose adding a college to student's application list
+- generate_letter_of_recommendation: Propose generating a recommendation letter
+
+CRITICAL - Write Tool Rules:
+1. ALWAYS use write tools when users want to CREATE, UPDATE, or DELETE data
+2. Write tools return a confirmation request - they do NOT execute immediately
+3. Explain what you're proposing clearly and wait for user confirmation
+4. NEVER apologize for needing confirmation - it's a security feature
 
 IMPORTANT - Finding Students by Name:
 - When user asks about a specific student BY NAME (e.g., "tell me about Sarah Williams"):
@@ -24,20 +43,22 @@ IMPORTANT - Finding Students by Name:
   2. Then use get_student with the studentId to get full details
 - NEVER try to use get_student with a name - it ONLY accepts UUID
 
-When users ask about students by application type (e.g., "students applying Early Decision"), use get_students_by_application_type with applicationType="ED" for Early Decision, "EA" for Early Action, "RD" for Regular Decision, or "Rolling" for Rolling admission.
+Example Interactions:
+- User: "Create a new student John Doe" → Use create_student tool
+- User: "Update Sarah's GPA to 3.8" → First get Sarah's ID, then use update_student
+- User: "Add Stanford to Emily's college list" → Use add_college_to_student
+- User: "Show me all students" → Use get_students (read-only, no confirmation)
 
-When users ask about students, tasks, or deadlines, use the appropriate tools to fetch real data from the database. Then provide a helpful response based on the actual data.
-
-Key guidelines:
-- Always use tools when users ask about specific data (students, tasks, deadlines)
+Key Guidelines:
+- Always use tools when users ask about or want to modify data
 - For students by name: ALWAYS search first, then get details by ID
-- Provide clear, formatted responses with the actual data
-- Use markdown formatting for better readability (bold, lists, etc.)
-- Be concise but thorough in your responses
-- Format dates in a readable format (e.g., "January 15, 2025")
-- If data is not found, acknowledge it politely
+- Provide clear, formatted responses with actual data
+- Use markdown formatting for better readability (bold, lists, tables)
+- Format dates in readable format (e.g., "January 15, 2025")
+- Be proactive - suggest helpful actions based on context
+- If data is not found, acknowledge it politely and offer alternatives
 
-Always be helpful and professional.`;
+Always be helpful, professional, and clear about what actions require confirmation.`;
 
 export interface LangChainAgentConfig {
   temperature?: number;
@@ -127,8 +148,9 @@ export async function runLangChainAgent(
   const agentStart = Date.now();
   const llm = createLLM(config);
 
-  // Bind tools to the LLM
-  const llmWithTools = llm.bindTools(langchainTools);
+  // Bind both read and write tools to the LLM
+  const allTools = [...langchainTools, ...crudTools];
+  const llmWithTools = llm.bindTools(allTools);
 
   // Extract the last user message
   const lastMessage = messages[messages.length - 1];
@@ -206,8 +228,8 @@ export async function runLangChainAgent(
           const toolStart = Date.now();
           console.log(`[LangChain Agent] Executing tool: ${toolCall.name}`);
 
-          // Find and execute the matching tool
-          const tool = langchainTools.find(t => t.name === toolCall.name);
+          // Find and execute the matching tool from all available tools
+          const tool = allTools.find(t => t.name === toolCall.name);
           if (!tool) {
             throw new Error(`Tool not found: ${toolCall.name}`);
           }

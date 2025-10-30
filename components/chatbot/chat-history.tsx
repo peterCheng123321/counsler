@@ -77,8 +77,8 @@ export function ChatHistory({
 
       {/* Sidebar */}
       <aside
-        className={`fixed lg:relative inset-y-0 left-0 z-50 w-80 lg:w-72 flex h-full flex-col border-r border-border/50 bg-surface backdrop-blur-xl shrink-0 shadow-2xl transition-transform duration-300 ease-in-out ${
-          isOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
+        className={`fixed lg:relative inset-y-0 right-0 z-50 w-80 lg:w-72 flex h-full flex-col border-l border-border/50 bg-surface backdrop-blur-xl shrink-0 shadow-2xl transition-transform duration-300 ease-in-out ${
+          isOpen ? "translate-x-0" : "translate-x-full lg:translate-x-0"
         }`}
       >
         {/* Header with Close Button (Mobile Only) */}
