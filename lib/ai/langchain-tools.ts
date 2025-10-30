@@ -80,7 +80,7 @@ export const getStudentsTool = new DynamicStructuredTool({
 export const getStudentsByApplicationTypeTool = new DynamicStructuredTool({
   name: "get_students_by_application_type",
   description:
-    "Query students by their college application type (Early Decision, Early Action, Regular Decision, Rolling). Returns students who have at least one application of the specified type.",
+    "Query students by their college application type (Early Decision, Early Action, Regular Decision, Rolling). Returns students who have at least one application of the specified type. Falls back to showing all students if college application data is not available.",
   schema: z.object({
     applicationType: z
       .enum(["ED", "EA", "RD", "Rolling"])
@@ -103,70 +103,150 @@ export const getStudentsByApplicationTypeTool = new DynamicStructuredTool({
       return JSON.stringify(cached);
     }
 
-    let query = supabase
-      .from("student_colleges")
-      .select(
+    try {
+      let query = supabase
+        .from("student_colleges")
+        .select(
+          `
+          application_type,
+          student_id,
+          students!inner (
+            id,
+            first_name,
+            last_name,
+            email,
+            graduation_year,
+            application_progress,
+            gpa_unweighted,
+            gpa_weighted
+          )
         `
-        application_type,
-        student_id,
-        students!inner (
-          id,
-          first_name,
-          last_name,
-          email,
-          graduation_year,
-          application_progress,
-          gpa_unweighted,
-          gpa_weighted
         )
-      `
-      )
-      .eq("application_type", applicationType);
+        .eq("application_type", applicationType);
 
-    if (graduationYear) {
-      query = query.eq("students.graduation_year", graduationYear);
-    }
+      if (graduationYear) {
+        query = query.eq("students.graduation_year", graduationYear);
+      }
 
-    const { data, error } = await query;
+      const { data, error } = await query;
 
-    if (error) {
-      throw new Error(
-        `Failed to fetch students by application type: ${error.message}`
-      );
-    }
+      if (error) {
+        console.error("Error querying student_colleges:", error);
+        // Fallback: return all students with a note
+        const fallbackQuery = supabase
+          .from("students")
+          .select("id, first_name, last_name, email, graduation_year, application_progress, gpa_unweighted, gpa_weighted")
+          .order("last_name", { ascending: true });
 
-    // Extract unique students
-    const studentMap = new Map<string, any>();
-    if (data) {
-      for (const item of data) {
-        if (
-          item.students &&
-          Array.isArray(item.students) &&
-          item.students.length > 0
-        ) {
-          const student = item.students[0];
-          const studentId = student.id;
-          if (!studentMap.has(studentId)) {
-            studentMap.set(studentId, student);
-          }
-        } else if (
-          item.students &&
-          typeof item.students === "object" &&
-          !Array.isArray(item.students)
-        ) {
-          const student = item.students as any;
-          const studentId = student.id;
-          if (studentId && !studentMap.has(studentId)) {
-            studentMap.set(studentId, student);
+        if (graduationYear) {
+          fallbackQuery.eq("graduation_year", graduationYear);
+        }
+
+        const { data: students, error: studentsError } = await fallbackQuery;
+
+        if (studentsError) {
+          throw new Error(
+            `Failed to fetch students: ${studentsError.message}`
+          );
+        }
+
+        const result = {
+          note: `College application data is not available yet. Showing all students${graduationYear ? ` for graduation year ${graduationYear}` : ""}.`,
+          students: students || [],
+          count: students?.length || 0,
+        };
+
+        queryCache.set(userId, "students_by_app_type", result, cacheKey);
+        return JSON.stringify(result);
+      }
+
+      // If no data found, also fallback
+      if (!data || data.length === 0) {
+        console.log(`No student_colleges data found for ${applicationType}`);
+        // Fallback: return all students with a note
+        const fallbackQuery = supabase
+          .from("students")
+          .select("id, first_name, last_name, email, graduation_year, application_progress, gpa_unweighted, gpa_weighted")
+          .order("last_name", { ascending: true });
+
+        if (graduationYear) {
+          fallbackQuery.eq("graduation_year", graduationYear);
+        }
+
+        const { data: students, error: studentsError } = await fallbackQuery;
+
+        if (studentsError) {
+          throw new Error(
+            `Failed to fetch students: ${studentsError.message}`
+          );
+        }
+
+        const result = {
+          note: `No students found with ${applicationType} applications${graduationYear ? ` for graduation year ${graduationYear}` : ""}. Showing all students instead.`,
+          students: students || [],
+          count: students?.length || 0,
+        };
+
+        queryCache.set(userId, "students_by_app_type", result, cacheKey);
+        return JSON.stringify(result);
+      }
+
+      // Extract unique students
+      const studentMap = new Map<string, any>();
+      if (data) {
+        for (const item of data) {
+          if (
+            item.students &&
+            Array.isArray(item.students) &&
+            item.students.length > 0
+          ) {
+            const student = item.students[0];
+            const studentId = student.id;
+            if (!studentMap.has(studentId)) {
+              studentMap.set(studentId, student);
+            }
+          } else if (
+            item.students &&
+            typeof item.students === "object" &&
+            !Array.isArray(item.students)
+          ) {
+            const student = item.students as any;
+            const studentId = student.id;
+            if (studentId && !studentMap.has(studentId)) {
+              studentMap.set(studentId, student);
+            }
           }
         }
       }
+
+      const result = Array.from(studentMap.values());
+      queryCache.set(userId, "students_by_app_type", result, cacheKey);
+
+      return JSON.stringify(result);
+    } catch (error) {
+      // Final fallback - return error with all students
+      console.error("Unexpected error in get_students_by_application_type:", error);
+
+      const fallbackQuery = supabase
+        .from("students")
+        .select("id, first_name, last_name, email, graduation_year, application_progress, gpa_unweighted, gpa_weighted")
+        .order("last_name", { ascending: true });
+
+      if (graduationYear) {
+        fallbackQuery.eq("graduation_year", graduationYear);
+      }
+
+      const { data: students } = await fallbackQuery;
+
+      const result = {
+        error: "Could not query by application type",
+        note: "Showing all students instead",
+        students: students || [],
+        count: students?.length || 0,
+      };
+
+      return JSON.stringify(result);
     }
-
-    const result = Array.from(studentMap.values());
-    queryCache.set(userId, "students_by_app_type", result, cacheKey);
-
-    return JSON.stringify(result);
   },
 });
 
