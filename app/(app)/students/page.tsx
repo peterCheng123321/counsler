@@ -2,12 +2,13 @@
 
 import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Plus, Search, Filter, Users, GraduationCap, Target, TrendingUp, Upload } from "lucide-react";
+import { Plus, Search, Filter, Users, GraduationCap, Target, TrendingUp, Upload, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { StudentCard } from "@/components/students/student-card";
 import { AddStudentModal } from "@/components/students/add-student-modal";
 import { BulkUploadModal } from "@/components/students/bulk-upload-modal";
+import { AIBulkUploadModal } from "@/components/students/ai-bulk-upload-modal";
 import { StudentFilters } from "@/components/students/student-filters";
 import { StatsCard } from "@/components/charts/stats-card";
 import { ProgressChart, type ProgressData } from "@/components/charts/progress-chart";
@@ -17,6 +18,7 @@ export default function StudentsPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [showAddModal, setShowAddModal] = useState(false);
   const [showBulkUploadModal, setShowBulkUploadModal] = useState(false);
+  const [showAIBulkUploadModal, setShowAIBulkUploadModal] = useState(false);
   const [filters, setFilters] = useState<{
     graduationYear?: number;
     progressMin?: number;
@@ -97,6 +99,14 @@ export default function StudentsPage() {
           >
             <Upload className="h-4 w-4 mr-2" />
             Bulk Upload
+          </Button>
+          <Button
+            variant="outline"
+            onClick={() => setShowAIBulkUploadModal(true)}
+            className="border-primary text-primary hover:bg-primary hover:text-white"
+          >
+            <Sparkles className="h-4 w-4 mr-2" />
+            AI Bulk Upload
           </Button>
           <Button onClick={() => setShowAddModal(true)}>
             <Plus className="h-4 w-4 mr-2" />
@@ -269,6 +279,12 @@ export default function StudentsPage() {
       <BulkUploadModal
         open={showBulkUploadModal}
         onOpenChange={setShowBulkUploadModal}
+      />
+
+      {/* AI Bulk Upload Modal */}
+      <AIBulkUploadModal
+        open={showAIBulkUploadModal}
+        onOpenChange={setShowAIBulkUploadModal}
       />
     </div>
   );
