@@ -132,10 +132,9 @@ export async function POST(request: NextRequest) {
               await new Promise((resolve) => setTimeout(resolve, 20));
             }
 
-            // Save assistant response
-            const { error: aiMsgError } = await supabase
-              .from("messages")
-              .insert({
+            // Save assistant response and update conversation timestamp in parallel
+            const [{ error: aiMsgError }] = await Promise.all([
+              supabase.from("messages").insert({
                 conversation_id: convId,
                 role: "assistant",
                 content: fullContent,
@@ -144,17 +143,16 @@ export async function POST(request: NextRequest) {
                   toolsUsed,
                   intermediateSteps: result.intermediateSteps?.length || 0,
                 },
-              });
+              }),
+              supabase
+                .from("conversations")
+                .update({ updated_at: new Date().toISOString() })
+                .eq("id", convId),
+            ]);
 
             if (aiMsgError) {
               console.error("Error saving AI message:", aiMsgError);
             }
-
-            // Update conversation timestamp
-            await supabase
-              .from("conversations")
-              .update({ updated_at: new Date().toISOString() })
-              .eq("id", convId);
 
             await sendSSEChunk(controller, {
               type: "done",
@@ -191,10 +189,9 @@ export async function POST(request: NextRequest) {
 
       const finalContent = result.content;
 
-      // Save assistant response
-      const { error: aiMsgError } = await supabase
-        .from("messages")
-        .insert({
+      // Save assistant response and update conversation timestamp in parallel
+      const [{ error: aiMsgError }] = await Promise.all([
+        supabase.from("messages").insert({
           conversation_id: convId,
           role: "assistant",
           content: finalContent,
@@ -203,7 +200,12 @@ export async function POST(request: NextRequest) {
             toolsUsed: result.intermediateSteps && result.intermediateSteps.length > 0,
             intermediateSteps: result.intermediateSteps?.length || 0,
           },
-        });
+        }),
+        supabase
+          .from("conversations")
+          .update({ updated_at: new Date().toISOString() })
+          .eq("id", convId),
+      ]);
 
       if (aiMsgError) {
         console.error("Error saving AI message:", aiMsgError);
@@ -212,12 +214,6 @@ export async function POST(request: NextRequest) {
           { status: 500 }
         );
       }
-
-      // Update conversation timestamp
-      await supabase
-        .from("conversations")
-        .update({ updated_at: new Date().toISOString() })
-        .eq("id", convId);
 
       return NextResponse.json({
         success: true,

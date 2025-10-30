@@ -152,44 +152,57 @@ export async function runLangChainAgent(
       // Add assistant message with tool calls to history
       allMessages.push(response);
 
-      // Execute each tool
-      for (const toolCall of response.tool_calls) {
+      // Execute tools in parallel for better performance
+      const toolPromises = response.tool_calls.map(async (toolCall) => {
         try {
           console.log(`[LangChain Agent] Executing tool: ${toolCall.name}`);
 
-          // Execute tool by name - type-safe approach
-          let toolResult: string;
-
           // Find and execute the matching tool
           const tool = langchainTools.find(t => t.name === toolCall.name);
-          if (tool) {
-            // Call the tool's func directly with proper typing
-            toolResult = await tool.func(toolCall.args as any);
-          } else {
+          if (!tool) {
             throw new Error(`Tool not found: ${toolCall.name}`);
           }
 
-          // Add tool result to messages
+          // Call the tool's func directly with proper typing
+          const toolResult = await tool.func(toolCall.args as any);
+
+          return {
+            success: true,
+            toolCall,
+            result: toolResult,
+          };
+        } catch (error) {
+          console.error(`[LangChain Agent] Tool execution error:`, error);
+          return {
+            success: false,
+            toolCall,
+            error: error instanceof Error ? error.message : "Unknown error",
+          };
+        }
+      });
+
+      // Wait for all tools to complete in parallel
+      const toolResults = await Promise.all(toolPromises);
+
+      // Add all tool results to messages
+      for (const result of toolResults) {
+        if (result.success) {
           allMessages.push({
             role: "tool",
-            content: toolResult,
-            tool_call_id: toolCall.id,
+            content: result.result,
+            tool_call_id: result.toolCall.id,
           } as any);
 
           toolCalls.push({
-            name: toolCall.name,
-            args: toolCall.args,
-            result: toolResult,
+            name: result.toolCall.name,
+            args: result.toolCall.args,
+            result: result.result,
           });
-        } catch (error) {
-          console.error(`[LangChain Agent] Tool execution error:`, error);
-          // Add error as tool result
+        } else {
           allMessages.push({
             role: "tool",
-            content: JSON.stringify({
-              error: error instanceof Error ? error.message : "Unknown error",
-            }),
-            tool_call_id: toolCall.id,
+            content: JSON.stringify({ error: result.error }),
+            tool_call_id: result.toolCall.id,
           } as any);
         }
       }
