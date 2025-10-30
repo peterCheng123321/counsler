@@ -209,8 +209,63 @@ export default function AgentDashboardPage() {
 
   if (!config) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <p className="text-text-secondary">Failed to load agent configuration</p>
+      <div className="flex items-center justify-center min-h-screen p-8">
+        <Card className="max-w-2xl">
+          <CardHeader>
+            <div className="flex items-center gap-3">
+              <Shield className="h-8 w-8 text-amber-500" />
+              <div>
+                <CardTitle>Agent Dashboard Setup Required</CardTitle>
+                <CardDescription>Database tables need to be created</CardDescription>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+              <p className="text-sm text-amber-900">
+                The agent system requires database tables that don't exist yet. This is a one-time setup.
+              </p>
+            </div>
+
+            <div className="space-y-3">
+              <h3 className="font-semibold text-sm">Quick Setup Steps:</h3>
+              <ol className="list-decimal list-inside space-y-2 text-sm text-text-secondary">
+                <li>
+                  Open{" "}
+                  <a
+                    href="https://supabase.com/dashboard"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-primary hover:underline"
+                  >
+                    Supabase Dashboard
+                  </a>
+                </li>
+                <li>Go to <strong>SQL Editor</strong> → <strong>New Query</strong></li>
+                <li>Copy and run the SQL from <code className="bg-surface px-1 py-0.5 rounded">FIX_AGENT_DASHBOARD.md</code></li>
+                <li>Go to <strong>Settings</strong> → <strong>API</strong> → Click <strong>"Reload schema"</strong></li>
+                <li>Wait 30 seconds, then refresh this page</li>
+              </ol>
+            </div>
+
+            <div className="flex gap-2">
+              <Button
+                onClick={() => window.open("https://github.com/peterCheng123321/counsler/blob/main/FIX_AGENT_DASHBOARD.md", "_blank")}
+                variant="default"
+              >
+                <Sparkles className="h-4 w-4 mr-2" />
+                View Setup Instructions
+              </Button>
+              <Button onClick={() => window.location.reload()} variant="outline">
+                Refresh Page
+              </Button>
+            </div>
+
+            <div className="text-xs text-text-tertiary pt-2 border-t">
+              <p>This one-time setup creates 3 tables: agent_config, agent_runs, and agent_insights</p>
+            </div>
+          </CardContent>
+        </Card>
       </div>
     );
   }
