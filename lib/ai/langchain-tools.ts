@@ -1,6 +1,7 @@
 /**
  * LangChain Tools Implementation
  * Wraps existing database query tools for use with LangChain agents
+ * All tools include comprehensive error handling and graceful fallbacks
  */
 
 import { DynamicStructuredTool } from "@langchain/core/tools";
@@ -13,7 +14,7 @@ import { DEMO_USER_ID } from "@/lib/constants";
 export const getStudentsTool = new DynamicStructuredTool({
   name: "get_students",
   description:
-    "Query students with optional filters. Use this to find students by name, graduation year, or application progress.",
+    "Query students with optional filters. Use this to find students by name, graduation year, or application progress. Always returns data even if filters don't match anything.",
   schema: z.object({
     search: z
       .string()
@@ -30,49 +31,69 @@ export const getStudentsTool = new DynamicStructuredTool({
       .describe("Maximum application progress percentage (0-100)"),
   }),
   func: async ({ search, graduationYear, progressMin, progressMax }) => {
-    const supabase = createAdminClient();
-    const userId = DEMO_USER_ID;
+    try {
+      const supabase = createAdminClient();
+      const userId = DEMO_USER_ID;
 
-    // Check cache
-    const cacheKey = { search, graduationYear, progressMin, progressMax };
-    const cached = queryCache.get(userId, "students", cacheKey);
-    if (cached) {
-      return JSON.stringify(cached);
+      // Check cache
+      const cacheKey = { search, graduationYear, progressMin, progressMax };
+      const cached = queryCache.get(userId, "students", cacheKey);
+      if (cached) {
+        return JSON.stringify(cached);
+      }
+
+      let query = supabase
+        .from("students")
+        .select("*")
+        .order("last_name", { ascending: true });
+
+      if (search) {
+        query = query.or(
+          `first_name.ilike.%${search}%,last_name.ilike.%${search}%,email.ilike.%${search}%`
+        );
+      }
+
+      if (graduationYear) {
+        query = query.eq("graduation_year", graduationYear);
+      }
+
+      if (progressMin !== undefined) {
+        query = query.gte("application_progress", progressMin);
+      }
+
+      if (progressMax !== undefined) {
+        query = query.lte("application_progress", progressMax);
+      }
+
+      const { data, error } = await query;
+
+      if (error) {
+        console.error("Error fetching students:", error);
+        return JSON.stringify({
+          error: "Failed to fetch students",
+          details: error.message,
+          students: [],
+          count: 0,
+        });
+      }
+
+      const result = data || [];
+      queryCache.set(userId, "students", result, cacheKey);
+
+      return JSON.stringify({
+        students: result,
+        count: result.length,
+        filters: { search, graduationYear, progressMin, progressMax },
+      });
+    } catch (error) {
+      console.error("Unexpected error in get_students:", error);
+      return JSON.stringify({
+        error: "Unexpected error occurred",
+        details: error instanceof Error ? error.message : "Unknown error",
+        students: [],
+        count: 0,
+      });
     }
-
-    let query = supabase
-      .from("students")
-      .select("*")
-      .order("last_name", { ascending: true });
-
-    if (search) {
-      query = query.or(
-        `first_name.ilike.%${search}%,last_name.ilike.%${search}%,email.ilike.%${search}%`
-      );
-    }
-
-    if (graduationYear) {
-      query = query.eq("graduation_year", graduationYear);
-    }
-
-    if (progressMin !== undefined) {
-      query = query.gte("application_progress", progressMin);
-    }
-
-    if (progressMax !== undefined) {
-      query = query.lte("application_progress", progressMax);
-    }
-
-    const { data, error } = await query;
-
-    if (error) {
-      throw new Error(`Failed to fetch students: ${error.message}`);
-    }
-
-    const result = data || [];
-    queryCache.set(userId, "students", result, cacheKey);
-
-    return JSON.stringify(result);
   },
 });
 
@@ -145,9 +166,12 @@ export const getStudentsByApplicationTypeTool = new DynamicStructuredTool({
         const { data: students, error: studentsError } = await fallbackQuery;
 
         if (studentsError) {
-          throw new Error(
-            `Failed to fetch students: ${studentsError.message}`
-          );
+          return JSON.stringify({
+            error: "Failed to fetch students",
+            details: studentsError.message,
+            students: [],
+            count: 0,
+          });
         }
 
         const result = {
@@ -176,9 +200,12 @@ export const getStudentsByApplicationTypeTool = new DynamicStructuredTool({
         const { data: students, error: studentsError } = await fallbackQuery;
 
         if (studentsError) {
-          throw new Error(
-            `Failed to fetch students: ${studentsError.message}`
-          );
+          return JSON.stringify({
+            error: "Failed to fetch students",
+            details: studentsError.message,
+            students: [],
+            count: 0,
+          });
         }
 
         const result = {
@@ -222,7 +249,11 @@ export const getStudentsByApplicationTypeTool = new DynamicStructuredTool({
       const result = Array.from(studentMap.values());
       queryCache.set(userId, "students_by_app_type", result, cacheKey);
 
-      return JSON.stringify(result);
+      return JSON.stringify({
+        students: result,
+        count: result.length,
+        applicationType,
+      });
     } catch (error) {
       // Final fallback - return error with all students
       console.error("Unexpected error in get_students_by_application_type:", error);
@@ -254,41 +285,78 @@ export const getStudentsByApplicationTypeTool = new DynamicStructuredTool({
 export const getStudentTool = new DynamicStructuredTool({
   name: "get_student",
   description:
-    "Get detailed information about a specific student by ID, including their colleges, essays, activities, and notes.",
+    "Get detailed information about a specific student by ID, including their colleges, essays, activities, and notes. Returns basic student info if detailed data is unavailable.",
   schema: z.object({
     studentId: z
       .string()
       .describe("The unique identifier (UUID) of the student"),
   }),
   func: async ({ studentId }) => {
-    const supabase = createAdminClient();
+    try {
+      const supabase = createAdminClient();
 
-    const { data, error } = await supabase
-      .from("students")
-      .select(
-        `
-        *,
-        student_colleges (
+      // Try to get detailed student data with related tables
+      const { data, error } = await supabase
+        .from("students")
+        .select(
+          `
           *,
-          colleges (*)
-        ),
-        essays (*),
-        activities (*),
-        notes (*)
-      `
-      )
-      .eq("id", studentId)
-      .single();
+          student_colleges (
+            *,
+            colleges (*)
+          ),
+          essays (*),
+          activities (*),
+          notes (*)
+        `
+        )
+        .eq("id", studentId)
+        .single();
 
-    if (error) {
-      throw new Error(`Failed to fetch student: ${error.message}`);
+      if (error) {
+        console.error("Error fetching student details:", error);
+
+        // Fallback: try to get just basic student info
+        const { data: basicData, error: basicError } = await supabase
+          .from("students")
+          .select("*")
+          .eq("id", studentId)
+          .single();
+
+        if (basicError || !basicData) {
+          return JSON.stringify({
+            error: "Student not found",
+            details: basicError?.message || "No student with this ID",
+            studentId,
+          });
+        }
+
+        return JSON.stringify({
+          ...basicData,
+          note: "Some related data (colleges, essays, activities, notes) could not be loaded",
+          student_colleges: [],
+          essays: [],
+          activities: [],
+          notes: [],
+        });
+      }
+
+      if (!data) {
+        return JSON.stringify({
+          error: "Student not found",
+          studentId,
+        });
+      }
+
+      return JSON.stringify(data);
+    } catch (error) {
+      console.error("Unexpected error in get_student:", error);
+      return JSON.stringify({
+        error: "Unexpected error occurred",
+        details: error instanceof Error ? error.message : "Unknown error",
+        studentId,
+      });
     }
-
-    if (!data) {
-      throw new Error("Student not found");
-    }
-
-    return JSON.stringify(data);
   },
 });
 
@@ -296,7 +364,7 @@ export const getStudentTool = new DynamicStructuredTool({
 export const getTasksTool = new DynamicStructuredTool({
   name: "get_tasks",
   description:
-    "Query tasks with optional filters. Use this to find tasks by status, priority, student, or due date range.",
+    "Query tasks with optional filters. Use this to find tasks by status, priority, student, or due date range. Always returns results even if no tasks match the filters.",
   schema: z.object({
     status: z
       .enum(["pending", "in_progress", "completed", "cancelled"])
@@ -317,52 +385,72 @@ export const getTasksTool = new DynamicStructuredTool({
       .describe("Filter tasks due on or before this date (YYYY-MM-DD)"),
   }),
   func: async ({ status, priority, studentId, dueDateFrom, dueDateTo }) => {
-    const supabase = createAdminClient();
-    const userId = DEMO_USER_ID;
+    try {
+      const supabase = createAdminClient();
+      const userId = DEMO_USER_ID;
 
-    // Check cache
-    const cacheKey = { status, priority, studentId, dueDateFrom, dueDateTo };
-    const cached = queryCache.get(userId, "tasks", cacheKey);
-    if (cached) {
-      return JSON.stringify(cached);
+      // Check cache
+      const cacheKey = { status, priority, studentId, dueDateFrom, dueDateTo };
+      const cached = queryCache.get(userId, "tasks", cacheKey);
+      if (cached) {
+        return JSON.stringify(cached);
+      }
+
+      let query = supabase
+        .from("tasks")
+        .select("*")
+        .order("due_date", { ascending: true })
+        .order("due_time", { ascending: true, nullsFirst: false });
+
+      if (status) {
+        query = query.eq("status", status);
+      }
+
+      if (priority) {
+        query = query.eq("priority", priority);
+      }
+
+      if (studentId) {
+        query = query.eq("student_id", studentId);
+      }
+
+      if (dueDateFrom) {
+        query = query.gte("due_date", dueDateFrom);
+      }
+
+      if (dueDateTo) {
+        query = query.lte("due_date", dueDateTo);
+      }
+
+      const { data, error } = await query;
+
+      if (error) {
+        console.error("Error fetching tasks:", error);
+        return JSON.stringify({
+          error: "Failed to fetch tasks",
+          details: error.message,
+          tasks: [],
+          count: 0,
+        });
+      }
+
+      const result = data || [];
+      queryCache.set(userId, "tasks", result, cacheKey);
+
+      return JSON.stringify({
+        tasks: result,
+        count: result.length,
+        filters: { status, priority, studentId, dueDateFrom, dueDateTo },
+      });
+    } catch (error) {
+      console.error("Unexpected error in get_tasks:", error);
+      return JSON.stringify({
+        error: "Unexpected error occurred",
+        details: error instanceof Error ? error.message : "Unknown error",
+        tasks: [],
+        count: 0,
+      });
     }
-
-    let query = supabase
-      .from("tasks")
-      .select("*")
-      .order("due_date", { ascending: true })
-      .order("due_time", { ascending: true, nullsFirst: false });
-
-    if (status) {
-      query = query.eq("status", status);
-    }
-
-    if (priority) {
-      query = query.eq("priority", priority);
-    }
-
-    if (studentId) {
-      query = query.eq("student_id", studentId);
-    }
-
-    if (dueDateFrom) {
-      query = query.gte("due_date", dueDateFrom);
-    }
-
-    if (dueDateTo) {
-      query = query.lte("due_date", dueDateTo);
-    }
-
-    const { data, error } = await query;
-
-    if (error) {
-      throw new Error(`Failed to fetch tasks: ${error.message}`);
-    }
-
-    const result = data || [];
-    queryCache.set(userId, "tasks", result, cacheKey);
-
-    return JSON.stringify(result);
   },
 });
 
@@ -374,23 +462,40 @@ export const getTaskTool = new DynamicStructuredTool({
     taskId: z.string().describe("The unique identifier (UUID) of the task"),
   }),
   func: async ({ taskId }) => {
-    const supabase = createAdminClient();
+    try {
+      const supabase = createAdminClient();
 
-    const { data, error } = await supabase
-      .from("tasks")
-      .select("*")
-      .eq("id", taskId)
-      .single();
+      const { data, error } = await supabase
+        .from("tasks")
+        .select("*")
+        .eq("id", taskId)
+        .single();
 
-    if (error) {
-      throw new Error(`Failed to fetch task: ${error.message}`);
+      if (error) {
+        console.error("Error fetching task:", error);
+        return JSON.stringify({
+          error: "Task not found",
+          details: error.message,
+          taskId,
+        });
+      }
+
+      if (!data) {
+        return JSON.stringify({
+          error: "Task not found",
+          taskId,
+        });
+      }
+
+      return JSON.stringify(data);
+    } catch (error) {
+      console.error("Unexpected error in get_task:", error);
+      return JSON.stringify({
+        error: "Unexpected error occurred",
+        details: error instanceof Error ? error.message : "Unknown error",
+        taskId,
+      });
     }
-
-    if (!data) {
-      throw new Error("Task not found");
-    }
-
-    return JSON.stringify(data);
   },
 });
 
@@ -398,7 +503,7 @@ export const getTaskTool = new DynamicStructuredTool({
 export const getUpcomingDeadlinesTool = new DynamicStructuredTool({
   name: "get_upcoming_deadlines",
   description:
-    "Get tasks with upcoming deadlines within a date range. Useful for finding deadlines this week, month, or custom range.",
+    "Get tasks with upcoming deadlines within a date range. Useful for finding deadlines this week, month, or custom range. Always returns results (empty array if no upcoming deadlines).",
   schema: z.object({
     days: z
       .number()
@@ -411,50 +516,72 @@ export const getUpcomingDeadlinesTool = new DynamicStructuredTool({
       .describe("Filter by priority level"),
   }),
   func: async ({ days = 7, priority }) => {
-    const supabase = createAdminClient();
-    const userId = DEMO_USER_ID;
+    try {
+      const supabase = createAdminClient();
+      const userId = DEMO_USER_ID;
 
-    const today = new Date();
-    const futureDate = new Date();
-    futureDate.setDate(today.getDate() + days);
+      const today = new Date();
+      const futureDate = new Date();
+      futureDate.setDate(today.getDate() + days);
 
-    const todayStr = today.toISOString().split("T")[0];
-    const futureDateStr = futureDate.toISOString().split("T")[0];
+      const todayStr = today.toISOString().split("T")[0];
+      const futureDateStr = futureDate.toISOString().split("T")[0];
 
-    // Check cache
-    const cacheKey = {
-      dueDateFrom: todayStr,
-      dueDateTo: futureDateStr,
-      priority,
-    };
-    const cached = queryCache.get(userId, "tasks", cacheKey);
-    if (cached) {
-      return JSON.stringify(cached);
+      // Check cache
+      const cacheKey = {
+        dueDateFrom: todayStr,
+        dueDateTo: futureDateStr,
+        priority,
+      };
+      const cached = queryCache.get(userId, "tasks", cacheKey);
+      if (cached) {
+        return JSON.stringify(cached);
+      }
+
+      let query = supabase
+        .from("tasks")
+        .select("*")
+        .gte("due_date", todayStr)
+        .lte("due_date", futureDateStr)
+        .in("status", ["pending", "in_progress"])
+        .order("due_date", { ascending: true })
+        .order("due_time", { ascending: true, nullsFirst: false });
+
+      if (priority) {
+        query = query.eq("priority", priority);
+      }
+
+      const { data, error } = await query;
+
+      if (error) {
+        console.error("Error fetching upcoming deadlines:", error);
+        return JSON.stringify({
+          error: "Failed to fetch upcoming deadlines",
+          details: error.message,
+          tasks: [],
+          count: 0,
+          dateRange: { from: todayStr, to: futureDateStr },
+        });
+      }
+
+      const result = data || [];
+      queryCache.set(userId, "tasks", result, cacheKey);
+
+      return JSON.stringify({
+        tasks: result,
+        count: result.length,
+        dateRange: { from: todayStr, to: futureDateStr, days },
+        priority,
+      });
+    } catch (error) {
+      console.error("Unexpected error in get_upcoming_deadlines:", error);
+      return JSON.stringify({
+        error: "Unexpected error occurred",
+        details: error instanceof Error ? error.message : "Unknown error",
+        tasks: [],
+        count: 0,
+      });
     }
-
-    let query = supabase
-      .from("tasks")
-      .select("*")
-      .gte("due_date", todayStr)
-      .lte("due_date", futureDateStr)
-      .in("status", ["pending", "in_progress"])
-      .order("due_date", { ascending: true })
-      .order("due_time", { ascending: true, nullsFirst: false });
-
-    if (priority) {
-      query = query.eq("priority", priority);
-    }
-
-    const { data, error } = await query;
-
-    if (error) {
-      throw new Error(`Failed to fetch upcoming deadlines: ${error.message}`);
-    }
-
-    const result = data || [];
-    queryCache.set(userId, "tasks", result, cacheKey);
-
-    return JSON.stringify(result);
   },
 });
 
