@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { z } from "zod";
 import { DEMO_USER_ID } from "@/lib/constants";
-import { ChatOpenAI, AzureChatOpenAI } from "@langchain/openai";
+import { createLLM, getActiveProviderInfo } from "@/lib/ai/llm-factory";
 
 const generateLorSchema = z.object({
   studentId: z.string().uuid(),
@@ -15,44 +15,6 @@ const generateLorSchema = z.object({
   relationshipContext: z.string().optional(),
   specificExamples: z.string().optional(),
 });
-
-/**
- * Create LLM instance for letter generation
- */
-function createLLM() {
-  // Try Azure OpenAI first
-  if (
-    process.env.AZURE_OPENAI_API_KEY &&
-    process.env.AZURE_OPENAI_ENDPOINT &&
-    process.env.AZURE_OPENAI_DEPLOYMENT_NAME
-  ) {
-    return new AzureChatOpenAI({
-      azureOpenAIApiKey: process.env.AZURE_OPENAI_API_KEY,
-      azureOpenAIApiInstanceName: process.env.AZURE_OPENAI_ENDPOINT.replace(
-        "https://",
-        ""
-      ).replace(".openai.azure.com/", "").replace(".openai.azure.com", ""),
-      azureOpenAIApiDeploymentName: process.env.AZURE_OPENAI_DEPLOYMENT_NAME,
-      azureOpenAIApiVersion: process.env.AZURE_OPENAI_API_VERSION || "2025-01-01-preview",
-      temperature: 0.7,
-      maxTokens: 2000,
-    });
-  }
-
-  // Fallback to OpenAI
-  if (process.env.OPENAI_API_KEY) {
-    return new ChatOpenAI({
-      openAIApiKey: process.env.OPENAI_API_KEY,
-      modelName: "gpt-4o-mini",
-      temperature: 0.7,
-      maxTokens: 2000,
-    });
-  }
-
-  throw new Error(
-    "No AI service configured for letter generation"
-  );
-}
 
 export async function POST(request: NextRequest) {
   try {
@@ -144,7 +106,10 @@ Write the complete letter now:`;
 
     // Generate letter using AI
     console.log("[LOR Generation] Calling AI to generate letter...");
-    const llm = createLLM();
+    const providerInfo = getActiveProviderInfo({ temperature: 0.7, maxTokens: 2000 });
+    console.log(`[LOR Generation] Using provider: ${providerInfo.provider} (${providerInfo.model})`);
+
+    const llm = createLLM({ temperature: 0.7, maxTokens: 2000 });
     const response = await llm.invoke(prompt);
     const generatedContent = response.content.toString();
     console.log("[LOR Generation] Letter generated successfully");

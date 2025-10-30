@@ -3,11 +3,10 @@
  * Provides AI agent with tool calling support for all AI providers
  */
 
-import { ChatOpenAI, AzureChatOpenAI } from "@langchain/openai";
-import { ChatPromptTemplate } from "@langchain/core/prompts";
 import { BaseMessage, HumanMessage, AIMessage, SystemMessage } from "@langchain/core/messages";
 import { langchainTools } from "./langchain-tools";
 import { crudTools } from "./langchain-tools-crud";
+import { createLLM, getActiveProviderInfo, type AIProvider, type LLMConfig } from "./llm-factory";
 
 const SYSTEM_PROMPT = `You are an AI assistant for a college application management platform called CAMP. You help college counselors manage student applications, track deadlines, and generate Letters of Recommendation.
 
@@ -78,56 +77,9 @@ Key Guidelines:
 
 Always be helpful, professional, and clear about what actions require confirmation.`;
 
-export interface LangChainAgentConfig {
-  temperature?: number;
-  maxTokens?: number;
-  streaming?: boolean;
+export interface LangChainAgentConfig extends LLMConfig {
   onToken?: (token: string) => void;
   onToolCall?: (toolName: string) => void;
-}
-
-/**
- * Create and configure the appropriate LLM based on available environment variables
- */
-function createLLM(config: LangChainAgentConfig = {}) {
-  const { temperature = 0.7, maxTokens = 2000, streaming = false } = config;
-
-  // Try Azure OpenAI first
-  if (
-    process.env.AZURE_OPENAI_API_KEY &&
-    process.env.AZURE_OPENAI_ENDPOINT &&
-    process.env.AZURE_OPENAI_DEPLOYMENT_NAME
-  ) {
-    console.log("Using Azure OpenAI with LangChain");
-    return new AzureChatOpenAI({
-      azureOpenAIApiKey: process.env.AZURE_OPENAI_API_KEY,
-      azureOpenAIApiInstanceName: process.env.AZURE_OPENAI_ENDPOINT.replace(
-        "https://",
-        ""
-      ).replace(".openai.azure.com/", "").replace(".openai.azure.com", ""),
-      azureOpenAIApiDeploymentName: process.env.AZURE_OPENAI_DEPLOYMENT_NAME,
-      azureOpenAIApiVersion: process.env.AZURE_OPENAI_API_VERSION || "2025-01-01-preview",
-      temperature,
-      maxTokens,
-      streaming,
-    });
-  }
-
-  // Fallback to OpenAI
-  if (process.env.OPENAI_API_KEY) {
-    console.log("Using OpenAI with LangChain");
-    return new ChatOpenAI({
-      openAIApiKey: process.env.OPENAI_API_KEY,
-      modelName: "gpt-4o-mini",
-      temperature,
-      maxTokens,
-      streaming,
-    });
-  }
-
-  throw new Error(
-    "No AI service configured. Please set AZURE_OPENAI_API_KEY or OPENAI_API_KEY in your environment variables."
-  );
 }
 
 /**
@@ -164,6 +116,11 @@ export async function runLangChainAgent(
   config: LangChainAgentConfig = {}
 ) {
   const agentStart = Date.now();
+
+  // Log active provider info
+  const providerInfo = getActiveProviderInfo(config);
+  console.log(`[LangChain Agent] Using provider: ${providerInfo.provider} (${providerInfo.model})`);
+
   const llm = createLLM(config);
 
   // Bind both read and write tools to the LLM
@@ -330,6 +287,10 @@ export async function langChainChat(
   chatHistory: BaseMessage[] = [],
   config: LangChainAgentConfig = {}
 ) {
+  // Log active provider info
+  const providerInfo = getActiveProviderInfo(config);
+  console.log(`[LangChain Chat] Using provider: ${providerInfo.provider} (${providerInfo.model})`);
+
   const llm = createLLM({ ...config, streaming: false });
 
   const messages = [
