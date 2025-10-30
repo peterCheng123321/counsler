@@ -4,6 +4,8 @@ import { runLangChainAgent } from "@/lib/ai/langchain-agent";
 import { streamLangGraphAgent, runLangGraphAgent } from "@/lib/ai/langgraph-agent";
 import { z } from "zod";
 import { DEMO_USER_ID } from "@/lib/constants";
+import { responseCache } from "@/lib/ai/response-cache";
+import { requestQueue } from "@/lib/ai/request-queue";
 
 const chatMessageSchema = z.object({
   conversationId: z.string().uuid().optional(),
@@ -271,51 +273,86 @@ export async function POST(request: NextRequest) {
       });
     } else {
       // Non-streaming response
-      let finalContent = "";
-      let metadata: any = {};
 
-      if (agentMode === "langgraph") {
-        console.log("Running LangGraph agent (non-streaming)...");
+      // Check cache first
+      const cachedResponse = responseCache.get(message, convId);
+      if (cachedResponse) {
+        console.log("[Chat API] Returning cached response");
 
-        // Convert messages to BaseMessage format
-        const { HumanMessage, AIMessage } = await import("@langchain/core/messages");
-        const baseMessages = messages.map((msg) => {
-          if (msg.role === "user") {
-            return new HumanMessage(msg.content);
-          } else {
-            return new AIMessage(msg.content);
-          }
+        // Save cached response to history
+        await supabase.from("messages").insert({
+          conversation_id: convId,
+          role: "assistant",
+          content: cachedResponse,
+          metadata: {
+            cached: true,
+            model: agentMode === "langgraph" ? "langgraph-agent" : "langchain-agent",
+          },
         });
 
-        const result = await runLangGraphAgent(
-          message,
-          baseMessages.slice(0, -1),
-          convId
-        );
-
-        finalContent = result.response;
-        metadata = {
-          model: "langgraph-agent",
-          toolsUsed: result.toolResults && result.toolResults.length > 0,
-          toolResults: result.toolResults?.length || 0,
-          insights: result.insights?.length || 0,
-          insightsData: result.insights,
-        };
-      } else {
-        console.log("Running LangChain agent (non-streaming)...");
-
-        const result = await runLangChainAgent(messages, {
-          temperature: 0.7,
-          maxTokens: 2000,
+        return NextResponse.json({
+          success: true,
+          data: {
+            conversationId: convId,
+            message: cachedResponse,
+            cached: true,
+            model: agentMode === "langgraph" ? "langgraph-agent" : "langchain-agent",
+          },
         });
-
-        finalContent = result.content;
-        metadata = {
-          model: "langchain-agent",
-          toolsUsed: result.intermediateSteps && result.intermediateSteps.length > 0,
-          intermediateSteps: result.intermediateSteps?.length || 0,
-        };
       }
+
+      // Queue the request to prevent overwhelming backend
+      const result = await requestQueue.enqueue(async () => {
+        let finalContent = "";
+        let metadata: any = {};
+
+        if (agentMode === "langgraph") {
+          console.log("Running LangGraph agent (non-streaming)...");
+
+          // Convert messages to BaseMessage format
+          const { HumanMessage, AIMessage } = await import("@langchain/core/messages");
+          const baseMessages = messages.map((msg) => {
+            if (msg.role === "user") {
+              return new HumanMessage(msg.content);
+            } else {
+              return new AIMessage(msg.content);
+            }
+          });
+
+          const result = await runLangGraphAgent(
+            message,
+            baseMessages.slice(0, -1),
+            convId
+          );
+
+          finalContent = result.response;
+          metadata = {
+            model: "langgraph-agent",
+            toolsUsed: result.toolResults && result.toolResults.length > 0,
+            toolResults: result.toolResults?.length || 0,
+            insights: result.insights?.length || 0,
+            insightsData: result.insights,
+          };
+        } else {
+          console.log("Running LangChain agent (non-streaming)...");
+
+          const result = await runLangChainAgent(messages, {
+            temperature: 0.7,
+            maxTokens: 2000,
+          });
+
+          finalContent = result.content;
+          metadata = {
+            model: "langchain-agent",
+            toolsUsed: result.intermediateSteps && result.intermediateSteps.length > 0,
+            intermediateSteps: result.intermediateSteps?.length || 0,
+          };
+        }
+
+        return { finalContent, metadata };
+      });
+
+      const { finalContent, metadata } = result;
 
       // Save assistant response and update conversation timestamp in parallel
       const [{ error: aiMsgError }] = await Promise.all([
@@ -338,6 +375,9 @@ export async function POST(request: NextRequest) {
           { status: 500 }
         );
       }
+
+      // Cache the response for future requests
+      responseCache.set(message, finalContent, convId);
 
       return NextResponse.json({
         success: true,

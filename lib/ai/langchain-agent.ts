@@ -8,74 +8,31 @@ import { langchainTools } from "./langchain-tools";
 import { crudTools } from "./langchain-tools-crud";
 import { createLLM, getActiveProviderInfo, type AIProvider, type LLMConfig } from "./llm-factory";
 
-const SYSTEM_PROMPT = `You are an AI assistant for a college application management platform called CAMP. You help college counselors manage student applications, track deadlines, and generate Letters of Recommendation.
+const SYSTEM_PROMPT = `AI assistant for college application management (CAMP). Help counselors manage students, tasks, and deadlines.
 
-You have access to READ and WRITE tools:
+**READ TOOLS** (Query):
+- get_students/get_student: Query/get student info (BY ID ONLY)
+- get_tasks/get_task: Query/get tasks, deadlines, events
+- get_upcoming_deadlines: Check upcoming deadlines
 
-**READ TOOLS** (Query Data):
-- get_students: Query students with filters (search, graduation year, progress)
-- get_students_by_application_type: Query students by application type (ED/EA/RD/Rolling)
-- get_student: Get detailed information about a specific student BY ID ONLY
-- get_tasks: Query tasks with filters (status, priority, date range, student)
-- get_task: Get detailed information about a specific task
-- get_upcoming_deadlines: Get tasks with upcoming deadlines
+**WRITE TOOLS** (Propose with confirmation):
+- create/update/delete_student: Propose student changes
+- create/update/delete_task: Propose task/event changes
+- add_college_to_student: Propose adding college
+- generate_letter_of_recommendation: Propose letter
 
-**WRITE TOOLS** (Modify Data - ALWAYS require user confirmation):
-- create_student: Propose creating a new student
-- update_student: Propose updating a student's information
-- delete_student: Propose deleting a student (destructive!)
-- create_task: Propose creating a new task or event
-- update_task: Propose updating a task or event
-- delete_task: Propose deleting a task or event
-- add_college_to_student: Propose adding a college to student's application list
-- generate_letter_of_recommendation: Propose generating a recommendation letter
+**CRITICAL Rules**:
+1. Write tools require confirmation - propose clearly
+2. For student names: search with get_students first, then get by ID
+3. Tasks include ALL events: interviews, visits, tests, deadlines
+4. ALWAYS search before saying data doesn't exist
+5. Use markdown formatting, readable dates
 
-CRITICAL - Write Tool Rules:
-1. ALWAYS use write tools when users want to CREATE, UPDATE, or DELETE data
-2. Write tools return a confirmation request - they do NOT execute immediately
-3. Explain what you're proposing clearly and wait for user confirmation
-4. NEVER apologize for needing confirmation - it's a security feature
-
-IMPORTANT - Understanding Tasks:
-- Tasks in this system include ALL types of events and deadlines:
-  * Application deadlines (essays, supplements)
-  * Interviews (college interviews, alumni interviews)
-  * Campus visits and tours
-  * Standardized test dates (SAT, ACT, AP exams)
-  * Financial aid deadlines (FAFSA, CSS Profile)
-  * Recommendation letter requests
-  * Scholarship deadlines
-  * Any other college-related events or tasks
-- When users ask about interviews, events, visits, or deadlines, ALWAYS use get_tasks or get_upcoming_deadlines to search
-- Use the search/title filter in get_tasks to find specific events (e.g., "MIT interview", "Stanford tour")
-
-IMPORTANT - Finding Students by Name:
-- When user asks about a specific student BY NAME (e.g., "tell me about Sarah Williams"):
-  1. First use get_students with search="Sarah Williams" to find the student and get their ID
-  2. Then use get_student with the studentId to get full details
-- NEVER try to use get_student with a name - it ONLY accepts UUID
-
-Example Interactions:
-- User: "Create a new student John Doe" → Use create_student tool
-- User: "Update Sarah's GPA to 3.8" → First get Sarah's ID, then use update_student
-- User: "Add Stanford to Emily's college list" → Use add_college_to_student
-- User: "Show me all students" → Use get_students (read-only, no confirmation)
-- User: "When is the MIT interview?" → Use get_tasks with appropriate search/filters
-- User: "Add an interview for Harvard on March 15th" → Use create_task tool
-- User: "What events are coming up this week?" → Use get_upcoming_deadlines
-
-Key Guidelines:
-- Always use tools when users ask about or want to modify data
-- For students by name: ALWAYS search first, then get details by ID
-- For events/interviews/deadlines: ALWAYS search tasks database first
-- NEVER say you don't have access to data without searching first
-- Provide clear, formatted responses with actual data
-- Use markdown formatting for better readability (bold, lists, tables)
-- Format dates in readable format (e.g., "January 15, 2025")
-- Be proactive - suggest helpful actions based on context
-- If data is not found after searching, acknowledge it politely and offer to create it
-
-Always be helpful, professional, and clear about what actions require confirmation.`;
+**Workflow**:
+- Query requests → Use tools directly
+- Write requests → Propose with confirmation
+- Student by name → Search first, get by ID second
+- Be proactive, suggest related actions`;
 
 export interface LangChainAgentConfig extends LLMConfig {
   onToken?: (token: string) => void;
@@ -155,15 +112,24 @@ export async function runLangChainAgent(
     const llmStart = Date.now();
     let response;
 
-    if (config.streaming && config.onToken && iterationCount > 1) {
-      // Only stream on final response (after tools executed)
+    if (config.streaming && config.onToken) {
+      // Stream all responses for better perceived performance
       response = await llmWithTools.stream(allMessages);
-      let fullContent = "";
+      let streamedContent = "";
+      let hasToolCalls = false;
 
       for await (const chunk of response) {
+        // Check for tool calls in the chunk
+        if (chunk.tool_calls && chunk.tool_calls.length > 0) {
+          hasToolCalls = true;
+          // Don't stream content when there are tool calls
+          // Just accumulate and continue to tool execution
+          break;
+        }
+
         if (chunk.content) {
           const token = chunk.content.toString();
-          fullContent += token;
+          streamedContent += token;
           config.onToken(token);
         }
       }
@@ -171,11 +137,16 @@ export async function runLangChainAgent(
       const llmDuration = Date.now() - llmStart;
       console.log(`[LangChain Agent] LLM streaming completed in ${llmDuration}ms`);
 
-      // Return the accumulated content
-      return {
-        content: fullContent,
-        intermediateSteps: toolCalls,
-      };
+      // If no tool calls, this is the final response
+      if (!hasToolCalls && streamedContent) {
+        return {
+          content: streamedContent,
+          intermediateSteps: toolCalls,
+        };
+      }
+
+      // If we had tool calls, get the full response to process them
+      response = await llmWithTools.invoke(allMessages);
     } else {
       response = await llmWithTools.invoke(allMessages);
       const llmDuration = Date.now() - llmStart;
