@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { queryCache } from "@/lib/cache/query-cache";
 import { z } from "zod";
+import { DEMO_USER_ID } from "@/lib/constants";
 
 const taskSchema = z.object({
   title: z.string().min(1).max(255),
@@ -17,15 +18,9 @@ const taskSchema = z.object({
 
 export async function GET(request: NextRequest) {
   try {
-    const supabase = await createClient();
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser();
-
-    if (authError || !user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const supabase = createAdminClient(); // Demo mode: Use admin client
+    // Demo mode: Skip authentication check
+    const userId = DEMO_USER_ID;
 
     const searchParams = request.nextUrl.searchParams;
     const status = searchParams.get("status");
@@ -42,7 +37,7 @@ export async function GET(request: NextRequest) {
       dueDateFrom: dueDateFrom || undefined,
       dueDateTo: dueDateTo || undefined,
     };
-    const cached = queryCache.get(user.id, "tasks", cacheKey);
+    const cached = queryCache.get(userId, "tasks", cacheKey);
     if (cached) {
       return NextResponse.json({ data: cached, success: true });
     }
@@ -121,7 +116,7 @@ export async function GET(request: NextRequest) {
     // Mock data should already be in DB, so we return what we found
 
     // Cache the result
-    queryCache.set(user.id, "tasks", tasksWithStudents, cacheKey);
+    queryCache.set(userId, "tasks", tasksWithStudents, cacheKey);
 
     return NextResponse.json({ data: tasksWithStudents, success: true });
   } catch (error) {
@@ -138,15 +133,9 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const supabase = await createClient();
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser();
-
-    if (authError || !user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const supabase = createAdminClient(); // Demo mode: Use admin client
+    // Demo mode: Skip authentication check
+    const userId = DEMO_USER_ID;
 
     const body = await request.json();
     const validatedData = taskSchema.parse(body);
@@ -154,7 +143,7 @@ export async function POST(request: NextRequest) {
     const { data: task, error } = await supabase
       .from("tasks")
       .insert({
-        counselor_id: user.id,
+        counselor_id: userId,
         student_id: validatedData.studentId || null,
         title: validatedData.title,
         description: validatedData.description,
@@ -183,7 +172,7 @@ export async function POST(request: NextRequest) {
         .from("students")
         .select("id, first_name, last_name, email")
         .eq("id", task.student_id)
-        .eq("counselor_id", user.id)
+        .eq("counselor_id", userId)
         .single();
       
       if (studentData) {
@@ -197,7 +186,7 @@ export async function POST(request: NextRequest) {
     };
 
     // Invalidate cache
-    queryCache.invalidateUser(user.id);
+    queryCache.invalidateUser(userId);
 
     return NextResponse.json({ data: taskWithStudent, success: true }, { status: 201 });
   } catch (error) {

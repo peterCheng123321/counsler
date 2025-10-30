@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { DEMO_USER_ID } from "@/lib/constants";
 
 export async function GET(
   request: NextRequest,
@@ -54,7 +55,7 @@ export async function GET(
       .from("conversations")
       .select("*")
       .eq("id", id)
-      .eq("counselor_id", user.id)
+      .eq("counselor_id", userId)
       .single();
 
     if (convError) {

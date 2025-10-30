@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { aiServiceManager } from "@/lib/ai";
 import { aiTools, executeTool } from "@/lib/ai/tools";
 import { AIMessage, AIToolCall } from "@/lib/ai/types";
 import { queryCache } from "@/lib/cache/query-cache";
 import { z } from "zod";
+import { DEMO_USER_ID } from "@/lib/constants";
 
 const chatMessageSchema = z.object({
   conversationId: z.string().uuid().optional(),
@@ -49,15 +50,9 @@ async function sendSSEChunk(controller: ReadableStreamDefaultController, data: a
 
 export async function POST(request: NextRequest) {
   try {
-    const supabase = await createClient();
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser();
-
-    if (authError || !user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const supabase = createAdminClient(); // Demo mode: Use admin client
+    // Demo mode: Skip authentication check
+    const userId = DEMO_USER_ID;
 
     const body = await request.json();
     const { conversationId, message, stream } = chatMessageSchema.parse(body);
@@ -68,7 +63,7 @@ export async function POST(request: NextRequest) {
       const { data: newConv, error: convError } = await supabase
         .from("conversations")
         .insert({
-          counselor_id: user.id,
+          counselor_id: userId,
           title: message.substring(0, 50),
         })
         .select("id")
@@ -245,7 +240,7 @@ export async function POST(request: NextRequest) {
                   
                   for (const toolCall of toolCalls) {
                     try {
-                      const toolResult = await executeTool(toolCall, user.id);
+                      const toolResult = await executeTool(toolCall, userId);
                       
                       // Save tool response message
                       const { error: toolMsgError } = await supabase
@@ -457,7 +452,7 @@ export async function POST(request: NextRequest) {
 
         for (const toolCall of aiResponse.toolCalls) {
           try {
-            const toolResult = await executeTool(toolCall, user.id);
+            const toolResult = await executeTool(toolCall, userId);
             
             // Save tool response message
             const { error: toolMsgError } = await supabase

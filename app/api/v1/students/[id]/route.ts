@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { z } from "zod";
+import { DEMO_USER_ID } from "@/lib/constants";
 
 const updateStudentSchema = z.object({
   firstName: z.string().min(2).max(50).optional(),
@@ -19,15 +20,9 @@ export async function GET(
 ) {
   try {
     const { id } = await params;
-    const supabase = await createClient();
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser();
-
-    if (authError || !user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const supabase = createAdminClient(); // Demo mode: Use admin client
+    // Demo mode: Skip authentication check
+    const userId = DEMO_USER_ID;
 
     const { data, error } = await supabase
       .from("students")
@@ -44,7 +39,7 @@ export async function GET(
       `
       )
       .eq("id", id)
-      .eq("counselor_id", user.id)
+      .eq("counselor_id", userId)
       .single();
 
     if (error) {
@@ -63,15 +58,9 @@ export async function PATCH(
 ) {
   try {
     const { id } = await params;
-    const supabase = await createClient();
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser();
-
-    if (authError || !user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const supabase = createAdminClient(); // Demo mode: Use admin client
+    // Demo mode: Skip authentication check
+    const userId = DEMO_USER_ID;
 
     const body = await request.json();
     const validatedData = updateStudentSchema.parse(body);
@@ -91,7 +80,7 @@ export async function PATCH(
       .from("students")
       .update(updateData)
       .eq("id", id)
-      .eq("counselor_id", user.id)
+      .eq("counselor_id", userId)
       .select()
       .single();
 
@@ -121,21 +110,15 @@ export async function DELETE(
 ) {
   try {
     const { id } = await params;
-    const supabase = await createClient();
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser();
-
-    if (authError || !user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const supabase = createAdminClient(); // Demo mode: Use admin client
+    // Demo mode: Skip authentication check
+    const userId = DEMO_USER_ID;
 
     const { error } = await supabase
       .from("students")
       .delete()
       .eq("id", id)
-      .eq("counselor_id", user.id);
+      .eq("counselor_id", userId);
 
     if (error) {
       return NextResponse.json({ error: "Failed to delete student" }, { status: 500 });

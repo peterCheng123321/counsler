@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { z } from "zod";
+import { DEMO_USER_ID } from "@/lib/constants";
 
 const updateTaskSchema = z.object({
   title: z.string().min(1).max(255).optional(),
@@ -21,21 +22,15 @@ export async function GET(
 ) {
   try {
     const { id } = await params;
-    const supabase = await createClient();
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser();
-
-    if (authError || !user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const supabase = createAdminClient(); // Demo mode: Use admin client
+    // Demo mode: Skip authentication check
+    const userId = DEMO_USER_ID;
 
     const { data: task, error } = await supabase
       .from("tasks")
       .select("*")
       .eq("id", id)
-      .eq("counselor_id", user.id)
+      .eq("counselor_id", userId)
       .single();
 
     if (error) {
@@ -53,7 +48,7 @@ export async function GET(
         .from("students")
         .select("id, first_name, last_name, email")
         .eq("id", task.student_id)
-        .eq("counselor_id", user.id)
+        .eq("counselor_id", userId)
         .single();
       
       if (studentData) {
@@ -81,15 +76,9 @@ export async function PATCH(
 ) {
   try {
     const { id } = await params;
-    const supabase = await createClient();
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser();
-
-    if (authError || !user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const supabase = createAdminClient(); // Demo mode: Use admin client
+    // Demo mode: Skip authentication check
+    const userId = DEMO_USER_ID;
 
     const body = await request.json();
     const validatedData = updateTaskSchema.parse(body);
@@ -118,7 +107,7 @@ export async function PATCH(
       .from("tasks")
       .update(updateData)
       .eq("id", id)
-      .eq("counselor_id", user.id)
+      .eq("counselor_id", userId)
       .select("*")
       .single();
 
@@ -137,7 +126,7 @@ export async function PATCH(
         .from("students")
         .select("id, first_name, last_name, email")
         .eq("id", task.student_id)
-        .eq("counselor_id", user.id)
+        .eq("counselor_id", userId)
         .single();
       
       if (studentData) {
@@ -171,21 +160,15 @@ export async function DELETE(
 ) {
   try {
     const { id } = await params;
-    const supabase = await createClient();
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser();
-
-    if (authError || !user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const supabase = createAdminClient(); // Demo mode: Use admin client
+    // Demo mode: Skip authentication check
+    const userId = DEMO_USER_ID;
 
     const { error } = await supabase
       .from("tasks")
       .delete()
       .eq("id", id)
-      .eq("counselor_id", user.id);
+      .eq("counselor_id", userId);
 
     if (error) {
       return NextResponse.json(
