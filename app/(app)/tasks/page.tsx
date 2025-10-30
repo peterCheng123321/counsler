@@ -307,6 +307,18 @@ export default function TasksPage() {
 
       {/* Add Task Modal */}
       <AddTaskModal open={showAddModal} onOpenChange={setShowAddModal} />
+
+      {/* Floating Action Button - only shown in list view with tasks */}
+      {!isLoading && !error && view === "list" && (
+        <button
+          onClick={() => setShowAddModal(true)}
+          className="fixed bottom-8 right-8 z-50 h-14 w-14 rounded-full bg-primary text-white shadow-lg hover:bg-primary-hover hover:shadow-xl transition-all duration-300 hover:scale-110 active:scale-95 flex items-center justify-center group"
+          aria-label="Add new task"
+          title="Add new task"
+        >
+          <Plus className="h-6 w-6 transition-transform group-hover:rotate-90 duration-300" />
+        </button>
+      )}
     </div>
   );
 }
