@@ -1,13 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { runLangChainAgent } from "@/lib/ai/langchain-agent";
+import { streamLangGraphAgent, runLangGraphAgent } from "@/lib/ai/langgraph-agent";
 import { z } from "zod";
 import { DEMO_USER_ID } from "@/lib/constants";
 
 const chatMessageSchema = z.object({
   conversationId: z.string().uuid().optional(),
   message: z.string().min(1).max(10000),
-  stream: z.boolean().optional().default(false), // LangChain streaming works differently
+  stream: z.boolean().optional().default(false),
+  agentMode: z.enum(["langchain", "langgraph"]).optional().default("langgraph"), // Default to new LangGraph agent
 });
 
 const HISTORY_LIMIT = 10; // Limit conversation history to last 10 messages
@@ -28,7 +30,7 @@ export async function POST(request: NextRequest) {
     const userId = DEMO_USER_ID;
 
     const body = await request.json();
-    const { conversationId, message, stream } = chatMessageSchema.parse(body);
+    const { conversationId, message, stream, agentMode } = chatMessageSchema.parse(body);
 
     // Get or create conversation
     let convId = conversationId;
@@ -94,70 +96,153 @@ export async function POST(request: NextRequest) {
           try {
             let fullContent = "";
             let toolsUsed = false;
+            let insights: any[] = [];
+            let toolResults: any[] = [];
 
-            console.log("Running LangChain agent with streaming...");
+            if (agentMode === "langgraph") {
+              console.log("Running LangGraph agent with streaming...");
 
-            const result = await runLangChainAgent(messages, {
-              temperature: 0.7,
-              maxTokens: 2000,
-              streaming: true,
-              onToken: async (token) => {
-                // Stream tokens as they arrive from OpenAI
-                fullContent += token;
+              // Convert messages to BaseMessage format for LangGraph
+              const { HumanMessage, AIMessage } = await import("@langchain/core/messages");
+              const baseMessages = messages.map((msg) => {
+                if (msg.role === "user") {
+                  return new HumanMessage(msg.content);
+                } else {
+                  return new AIMessage(msg.content);
+                }
+              });
+
+              // Stream the LangGraph agent
+              const streamGen = streamLangGraphAgent(
+                message,
+                baseMessages.slice(0, -1), // Exclude the last message (current user message)
+                convId
+              );
+
+              for await (const event of streamGen) {
+                switch (event.type) {
+                  case "token":
+                    fullContent += event.content;
+                    await sendSSEChunk(controller, {
+                      type: "token",
+                      content: event.content,
+                    });
+                    break;
+
+                  case "tool":
+                    toolsUsed = true;
+                    toolResults.push(event.content);
+                    await sendSSEChunk(controller, {
+                      type: "tool_call",
+                      toolCall: {
+                        name: event.content.toolName,
+                        id: "langgraph-tool",
+                      },
+                    });
+                    break;
+
+                  case "insight":
+                    insights.push(event.content);
+                    await sendSSEChunk(controller, {
+                      type: "insight",
+                      insight: event.content,
+                    });
+                    break;
+
+                  case "complete":
+                    if (!fullContent && event.content.response) {
+                      fullContent = event.content.response;
+                    }
+                    if (event.content.toolResults) {
+                      toolResults = event.content.toolResults;
+                      toolsUsed = toolResults.length > 0;
+                    }
+                    break;
+                }
+              }
+
+              // Save assistant response with insights
+              const [{ error: aiMsgError }] = await Promise.all([
+                supabase.from("messages").insert({
+                  conversation_id: convId,
+                  role: "assistant",
+                  content: fullContent,
+                  metadata: {
+                    model: "langgraph-agent",
+                    toolsUsed,
+                    toolResults: toolResults.length,
+                    insights: insights.length,
+                    insightsData: insights,
+                  },
+                }),
+                supabase
+                  .from("conversations")
+                  .update({ updated_at: new Date().toISOString() })
+                  .eq("id", convId),
+              ]);
+
+              if (aiMsgError) {
+                console.error("Error saving AI message:", aiMsgError);
+              }
+            } else {
+              // Original LangChain agent logic
+              console.log("Running LangChain agent with streaming...");
+
+              const result = await runLangChainAgent(messages, {
+                temperature: 0.7,
+                maxTokens: 2000,
+                streaming: true,
+                onToken: async (token) => {
+                  fullContent += token;
+                  await sendSSEChunk(controller, {
+                    type: "token",
+                    content: token,
+                  });
+                },
+                onToolCall: async (toolName) => {
+                  toolsUsed = true;
+                  await sendSSEChunk(controller, {
+                    type: "tool_call",
+                    toolCall: {
+                      name: toolName,
+                      id: "langchain-tool",
+                    },
+                  });
+                },
+              });
+
+              if (!fullContent && result.content) {
+                fullContent = result.content;
                 await sendSSEChunk(controller, {
                   type: "token",
-                  content: token,
+                  content: fullContent,
                 });
-              },
-              onToolCall: async (toolName) => {
+              }
+
+              if (result.intermediateSteps && result.intermediateSteps.length > 0) {
                 toolsUsed = true;
-                // Send tool call notification
-                await sendSSEChunk(controller, {
-                  type: "tool_call",
-                  toolCall: {
-                    name: toolName,
-                    id: "langchain-tool",
+              }
+
+              const [{ error: aiMsgError }] = await Promise.all([
+                supabase.from("messages").insert({
+                  conversation_id: convId,
+                  role: "assistant",
+                  content: fullContent,
+                  metadata: {
+                    model: "langchain-agent",
+                    toolsUsed,
+                    intermediateSteps: result.intermediateSteps?.length || 0,
                   },
-                });
-              },
-            });
+                }),
+                supabase
+                  .from("conversations")
+                  .update({ updated_at: new Date().toISOString() })
+                  .eq("id", convId),
+              ]);
 
-            // Use result content if streaming didn't populate fullContent
-            if (!fullContent && result.content) {
-              fullContent = result.content;
-
-              // Send the content if not streamed
-              await sendSSEChunk(controller, {
-                type: "token",
-                content: fullContent,
-              });
-            }
-
-            // Check if tools were used
-            if (result.intermediateSteps && result.intermediateSteps.length > 0) {
-              toolsUsed = true;
-            }
-
-            // Save assistant response and update conversation timestamp in parallel
-            const [{ error: aiMsgError }] = await Promise.all([
-              supabase.from("messages").insert({
-                conversation_id: convId,
-                role: "assistant",
-                content: fullContent,
-                metadata: {
-                  model: "langchain-agent",
-                  toolsUsed,
-                  intermediateSteps: result.intermediateSteps?.length || 0,
-                },
-              }),
-              supabase
-                .from("conversations")
-                .update({ updated_at: new Date().toISOString() })
-                .eq("id", convId),
-            ]);
-
-            if (aiMsgError) {
-              console.error("Error saving AI message:", aiMsgError);
+              if (aiMsgError) {
+                console.error("Error saving AI message:", aiMsgError);
+              }
             }
 
             await sendSSEChunk(controller, {
@@ -167,7 +252,7 @@ export async function POST(request: NextRequest) {
 
             controller.close();
           } catch (error) {
-            console.error("LangChain agent error:", error);
+            console.error("Agent error:", error);
             await sendSSEChunk(controller, {
               type: "error",
               error: error instanceof Error ? error.message : "Unknown error",
@@ -186,14 +271,51 @@ export async function POST(request: NextRequest) {
       });
     } else {
       // Non-streaming response
-      console.log("Running LangChain agent (non-streaming)...");
+      let finalContent = "";
+      let metadata: any = {};
 
-      const result = await runLangChainAgent(messages, {
-        temperature: 0.7,
-        maxTokens: 2000,
-      });
+      if (agentMode === "langgraph") {
+        console.log("Running LangGraph agent (non-streaming)...");
 
-      const finalContent = result.content;
+        // Convert messages to BaseMessage format
+        const { HumanMessage, AIMessage } = await import("@langchain/core/messages");
+        const baseMessages = messages.map((msg) => {
+          if (msg.role === "user") {
+            return new HumanMessage(msg.content);
+          } else {
+            return new AIMessage(msg.content);
+          }
+        });
+
+        const result = await runLangGraphAgent(
+          message,
+          baseMessages.slice(0, -1),
+          convId
+        );
+
+        finalContent = result.response;
+        metadata = {
+          model: "langgraph-agent",
+          toolsUsed: result.toolResults && result.toolResults.length > 0,
+          toolResults: result.toolResults?.length || 0,
+          insights: result.insights?.length || 0,
+          insightsData: result.insights,
+        };
+      } else {
+        console.log("Running LangChain agent (non-streaming)...");
+
+        const result = await runLangChainAgent(messages, {
+          temperature: 0.7,
+          maxTokens: 2000,
+        });
+
+        finalContent = result.content;
+        metadata = {
+          model: "langchain-agent",
+          toolsUsed: result.intermediateSteps && result.intermediateSteps.length > 0,
+          intermediateSteps: result.intermediateSteps?.length || 0,
+        };
+      }
 
       // Save assistant response and update conversation timestamp in parallel
       const [{ error: aiMsgError }] = await Promise.all([
@@ -201,11 +323,7 @@ export async function POST(request: NextRequest) {
           conversation_id: convId,
           role: "assistant",
           content: finalContent,
-          metadata: {
-            model: "langchain-agent",
-            toolsUsed: result.intermediateSteps && result.intermediateSteps.length > 0,
-            intermediateSteps: result.intermediateSteps?.length || 0,
-          },
+          metadata,
         }),
         supabase
           .from("conversations")
@@ -226,7 +344,8 @@ export async function POST(request: NextRequest) {
         data: {
           conversationId: convId,
           message: finalContent,
-          model: "langchain-agent",
+          insights: metadata.insightsData,
+          model: metadata.model,
         },
       });
     }
