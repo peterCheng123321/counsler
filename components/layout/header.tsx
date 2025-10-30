@@ -69,14 +69,14 @@ export function Header({ onCommandPaletteOpen }: HeaderProps = {}) {
 
         {/* Right Side Actions */}
         <div className="flex items-center space-x-3 ml-auto">
-          {/* AI Command Button */}
+          {/* AI Assistant Button */}
           <Button
             variant="outline"
             className="gap-2 border-primary/20 hover:border-primary hover:bg-primary/5 transition-all duration-300"
             onClick={onCommandPaletteOpen}
           >
             <Sparkles className="h-4 w-4 text-primary" />
-            <span className="hidden md:inline font-medium">AI Commands</span>
+            <span className="hidden md:inline font-medium">AI Assistant</span>
             <kbd className="hidden lg:inline-flex h-5 select-none items-center gap-1 rounded border bg-muted px-1.5 font-mono text-[10px] font-medium opacity-100">
               <span className="text-xs">⌘</span>K
             </kbd>
