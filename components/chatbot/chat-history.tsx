@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Plus, Search } from "lucide-react";
+import { Plus, Search, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -13,12 +13,16 @@ interface ChatHistoryProps {
   selectedConversation: string | null;
   onSelectConversation: (id: string | null) => void;
   onNewChat?: () => void;
+  isOpen: boolean;
+  onClose: () => void;
 }
 
 export function ChatHistory({
   selectedConversation,
   onSelectConversation,
   onNewChat,
+  isOpen,
+  onClose,
 }: ChatHistoryProps) {
   const [searchQuery, setSearchQuery] = useState("");
 
@@ -62,28 +66,55 @@ export function ChatHistory({
   };
 
   return (
-    <aside className="w-64 md:w-72 flex h-full flex-col border-r border-border/50 bg-surface/50 backdrop-blur-sm shrink-0 shadow-xl transition-all duration-300 ease-in-out">
-      {/* New Chat Button */}
-      <div className="border-b border-border/50 p-4 shrink-0 bg-gradient-to-r from-surface to-surface/80 transition-all duration-300 ease-in-out">
-        <Button
-          className="w-full font-semibold shadow-md hover:shadow-lg transition-all duration-300 ease-out"
-          onClick={handleNewChatClick}
-          variant={selectedConversation === null ? "default" : "outline"}
-        >
-          <Plus className="h-4 w-4 mr-2 transition-transform duration-300 ease-out group-hover:rotate-90" />
-          New Chat
-        </Button>
-      </div>
+    <>
+      {/* Mobile Overlay */}
+      {isOpen && (
+        <div
+          className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40 lg:hidden transition-opacity duration-300 ease-in-out"
+          onClick={onClose}
+        />
+      )}
+
+      {/* Sidebar */}
+      <aside
+        className={`fixed lg:relative inset-y-0 left-0 z-50 w-80 lg:w-72 flex h-full flex-col border-r border-border/50 bg-surface backdrop-blur-xl shrink-0 shadow-2xl transition-transform duration-300 ease-in-out ${
+          isOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
+        }`}
+      >
+        {/* Header with Close Button (Mobile Only) */}
+        <div className="flex items-center justify-between border-b border-border/50 p-4 lg:hidden shrink-0 bg-gradient-to-r from-primary/10 to-primary/5">
+          <h2 className="text-lg font-bold text-text-primary">Chat History</h2>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={onClose}
+            className="hover:bg-primary/10"
+          >
+            <X className="h-5 w-5" />
+          </Button>
+        </div>
+
+        {/* New Chat Button */}
+        <div className="border-b border-border/50 p-4 shrink-0 bg-gradient-to-b from-surface/80 to-surface/40">
+          <Button
+            className="w-full font-semibold shadow-md hover:shadow-lg transition-all duration-300 ease-out group"
+            onClick={handleNewChatClick}
+            variant={selectedConversation === null ? "default" : "outline"}
+          >
+            <Plus className="h-4 w-4 mr-2 transition-transform duration-300 ease-out group-hover:rotate-90" />
+            New Chat
+          </Button>
+        </div>
 
       {/* Search */}
-      <div className="border-b border-border/50 p-4 shrink-0 bg-gradient-to-r from-surface to-surface/80 transition-all duration-300 ease-in-out">
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-tertiary transition-colors duration-300" />
+      <div className="border-b border-border/50 p-4 shrink-0 bg-gradient-to-b from-surface/40 to-transparent">
+        <div className="relative group">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-tertiary group-focus-within:text-primary transition-colors duration-300" />
           <Input
-            placeholder="Search chats..."
+            placeholder="Search conversations..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-10 bg-background/50 border-border/50 focus:border-primary transition-all duration-300 ease-out"
+            className="pl-10 bg-background border-border focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all duration-300 ease-out"
           />
         </div>
       </div>
@@ -209,6 +240,7 @@ export function ChatHistory({
         )}
       </div>
     </aside>
+    </>
   );
 }
 

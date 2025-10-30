@@ -6,6 +6,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { format } from "date-fns";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { useTypewriter } from "@/hooks/use-typewriter";
 
 interface ChatMessageProps {
   message: {
@@ -14,11 +15,21 @@ interface ChatMessageProps {
     content: string;
     timestamp: Date;
   };
+  enableTypewriter?: boolean;
 }
 
-export const ChatMessage = memo(function ChatMessage({ message }: ChatMessageProps) {
+export const ChatMessage = memo(function ChatMessage({ message, enableTypewriter = false }: ChatMessageProps) {
   const isUser = message.role === "user";
   const [formattedTime, setFormattedTime] = useState<string>("");
+
+  // Use typewriter effect for assistant messages
+  const { displayedText, isComplete } = useTypewriter({
+    text: message.content,
+    speed: 80, // Characters per second - adjust for desired speed
+    enabled: !isUser && enableTypewriter,
+  });
+
+  const contentToDisplay = (!isUser && enableTypewriter) ? displayedText : message.content;
 
   // Format time on client side only to avoid hydration mismatch
   useEffect(() => {
@@ -64,6 +75,7 @@ export const ChatMessage = memo(function ChatMessage({ message }: ChatMessagePro
                 {message.content}
               </div>
             ) : (
+              <>
               <ReactMarkdown
                 remarkPlugins={[remarkGfm]}
                 components={{
@@ -173,8 +185,12 @@ export const ChatMessage = memo(function ChatMessage({ message }: ChatMessagePro
                   ),
                 }}
               >
-                {message.content}
+                {contentToDisplay}
               </ReactMarkdown>
+              {enableTypewriter && !isComplete && (
+                <span className="inline-block w-1 h-4 bg-primary animate-pulse ml-0.5" />
+              )}
+              </>
             )}
           </div>
         </div>

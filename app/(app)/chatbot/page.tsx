@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Plus, Search, Send, Paperclip, Sparkles } from "lucide-react";
+import { Plus, Search, Send, Paperclip, Sparkles, Menu } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ChatMessage } from "@/components/chatbot/chat-message";
@@ -52,6 +52,7 @@ export default function ChatbotPage() {
   const [isTyping, setIsTyping] = useState(false);
   const [isUsingTools, setIsUsingTools] = useState(false);
   const [selectedConversation, setSelectedConversation] = useState<string | null>(null);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -280,18 +281,38 @@ export default function ChatbotPage() {
   };
 
   return (
-    <div className="flex h-[calc(100vh-8rem)] gap-4 overflow-hidden">
+    <div className="flex h-[calc(100vh-8rem)] overflow-hidden relative">
       {/* Chat History Sidebar */}
-      <div className="transition-all duration-300 ease-in-out">
-        <ChatHistory
-          selectedConversation={selectedConversation}
-          onSelectConversation={setSelectedConversation}
-          onNewChat={handleNewChat}
-        />
-      </div>
+      <ChatHistory
+        selectedConversation={selectedConversation}
+        onSelectConversation={(id) => {
+          setSelectedConversation(id);
+          setIsSidebarOpen(false); // Close sidebar on mobile when conversation selected
+        }}
+        onNewChat={() => {
+          handleNewChat();
+          setIsSidebarOpen(false); // Close sidebar on mobile when new chat
+        }}
+        isOpen={isSidebarOpen}
+        onClose={() => setIsSidebarOpen(false)}
+      />
 
       {/* Chat Area */}
-      <div className="flex flex-1 flex-col min-w-0 transition-all duration-300 ease-in-out">
+      <div className="flex flex-1 flex-col min-w-0">
+        {/* Mobile Header with Menu Button */}
+        <div className="lg:hidden flex items-center gap-3 border-b border-border/50 bg-surface/80 backdrop-blur-sm p-4 shrink-0">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setIsSidebarOpen(true)}
+            className="hover:bg-primary/10"
+          >
+            <Menu className="h-5 w-5" />
+          </Button>
+          <h1 className="text-lg font-semibold text-text-primary">
+            {selectedConversation ? "Chat" : "New Chat"}
+          </h1>
+        </div>
         {/* Messages Area */}
         <div className="flex-1 overflow-y-auto p-6 md:p-8 lg:p-12">
           <div className="mx-auto max-w-4xl space-y-6">
@@ -326,8 +347,12 @@ export default function ChatbotPage() {
                   </div>
                 ) : (
                   <>
-                    {messages.map((message) => (
-                      <ChatMessage key={message.id} message={message} />
+                    {messages.map((message, index) => (
+                      <ChatMessage
+                        key={message.id}
+                        message={message}
+                        enableTypewriter={index === messages.length - 1 && message.role === "assistant" && !isTyping}
+                      />
                     ))}
                   </>
                 )}
