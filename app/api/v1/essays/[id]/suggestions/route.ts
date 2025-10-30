@@ -4,7 +4,7 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { createLLM } from "@/lib/ai/llm";
+import { createLLM } from "@/lib/ai/llm-factory";
 
 export async function POST(
   request: NextRequest,
