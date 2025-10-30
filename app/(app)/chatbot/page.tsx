@@ -3,8 +3,16 @@
 import { useState, useRef, useEffect, Suspense } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSearchParams } from "next/navigation";
-import { Send, Paperclip, Sparkles, Menu } from "lucide-react";
+import { Send, Paperclip, Sparkles, Menu, Brain, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { ChatMessage } from "@/components/chatbot/chat-message";
 import { SuggestionChips } from "@/components/chatbot/suggestion-chips";
 import { ChatHistory } from "@/components/chatbot/chat-history";
@@ -67,6 +75,7 @@ function ChatbotContent() {
   const [pendingAction, setPendingAction] = useState<AIAction | null>(null);
   const [showConfirmation, setShowConfirmation] = useState(false);
   const [confirmationMessage, setConfirmationMessage] = useState<string>("");
+  const [agentMode, setAgentMode] = useState<"langchain" | "langgraph">("langgraph");
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -160,6 +169,7 @@ function ChatbotContent() {
         conversationId: selectedConversation || undefined,
         message: messageContent,
         stream: true,
+        agentMode: agentMode,
       });
 
       if (response.stream && response.success) {
@@ -457,6 +467,37 @@ function ChatbotContent() {
                 />
               </div>
             )}
+
+            {/* Agent Mode Selector */}
+            <div className="px-2 flex items-center gap-3">
+              <div className="flex items-center gap-2">
+                <Brain className="h-4 w-4 text-primary" />
+                <span className="text-sm font-medium text-text-secondary">Agent Mode:</span>
+              </div>
+              <Select
+                value={agentMode}
+                onValueChange={(value) => setAgentMode(value as "langchain" | "langgraph")}
+              >
+                <SelectTrigger className="w-40 h-8 text-sm">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="langgraph">
+                    <div className="flex items-center gap-2">
+                      <Zap className="h-3 w-3" />
+                      <span>LangGraph</span>
+                      <Badge variant="outline" className="text-xs ml-1">Recommended</Badge>
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="langchain">
+                    <div className="flex items-center gap-2">
+                      <Brain className="h-3 w-3" />
+                      <span>LangChain</span>
+                    </div>
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
 
             {/* Input Box - Modern Floating Style */}
             <div className="group relative">
