@@ -9,6 +9,7 @@ import { createLLM } from "./llm-factory";
 import { langchainTools } from "./langchain-tools";
 import { crudTools } from "./langchain-tools-crud";
 import { analyticsTools } from "./analytics-tools";
+import { enhancedTools } from "./enhanced-tools";
 import { MemorySaver } from "@langchain/langgraph";
 
 /**
@@ -81,8 +82,8 @@ export function createLangGraphAgent() {
     maxTokens: 2000,
   });
 
-  // Combine all tools
-  const allTools = [...langchainTools, ...crudTools, ...analyticsTools];
+  // Combine all tools including enhanced capabilities
+  const allTools = [...langchainTools, ...crudTools, ...analyticsTools, ...enhancedTools];
 
   console.log(`[LangGraph Agent] Creating agent with ${allTools.length} tools`);
 

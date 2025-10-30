@@ -6,6 +6,7 @@
 import { BaseMessage, HumanMessage, AIMessage, SystemMessage } from "@langchain/core/messages";
 import { langchainTools } from "./langchain-tools";
 import { crudTools } from "./langchain-tools-crud";
+import { enhancedTools } from "./enhanced-tools";
 import { createLLM, getActiveProviderInfo, type AIProvider, type LLMConfig } from "./llm-factory";
 
 const SYSTEM_PROMPT = `AI assistant for college application management (CAMP). Help counselors manage students, tasks, and deadlines.
@@ -80,8 +81,8 @@ export async function runLangChainAgent(
 
   const llm = createLLM(config);
 
-  // Bind both read and write tools to the LLM
-  const allTools = [...langchainTools, ...crudTools];
+  // Bind read, write, and enhanced tools to the LLM
+  const allTools = [...langchainTools, ...crudTools, ...enhancedTools];
   const llmWithTools = llm.bindTools(allTools);
 
   // Extract the last user message
