@@ -159,7 +159,8 @@ export async function runLangChainAgent(
         if (tool) {
           try {
             console.log(`[LangChain Agent] Executing tool: ${toolCall.name}`);
-            const toolResult = await tool.invoke(toolCall.args);
+            // Use call() method instead of invoke() for better type compatibility
+            const toolResult = await tool.call(toolCall.args);
 
             // Add tool result to messages
             allMessages.push({
