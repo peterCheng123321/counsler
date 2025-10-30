@@ -364,8 +364,12 @@ export const getStudentTool = new DynamicStructuredTool({
 export const getTasksTool = new DynamicStructuredTool({
   name: "get_tasks",
   description:
-    "Query tasks with optional filters. Use this to find tasks by status, priority, student, or due date range. Always returns results even if no tasks match the filters.",
+    "Query tasks and events with optional filters. Use this to find tasks by title/description (interviews, campus visits, deadlines), status, priority, student, or due date range. Always returns results even if no tasks match the filters.",
   schema: z.object({
+    search: z
+      .string()
+      .optional()
+      .describe("Search tasks by title or description (e.g., 'MIT interview', 'Stanford tour', 'essay deadline')"),
     status: z
       .enum(["pending", "in_progress", "completed", "cancelled"])
       .optional()
@@ -384,13 +388,13 @@ export const getTasksTool = new DynamicStructuredTool({
       .optional()
       .describe("Filter tasks due on or before this date (YYYY-MM-DD)"),
   }),
-  func: async ({ status, priority, studentId, dueDateFrom, dueDateTo }) => {
+  func: async ({ search, status, priority, studentId, dueDateFrom, dueDateTo }) => {
     try {
       const supabase = createAdminClient();
       const userId = DEMO_USER_ID;
 
       // Check cache
-      const cacheKey = { status, priority, studentId, dueDateFrom, dueDateTo };
+      const cacheKey = { search, status, priority, studentId, dueDateFrom, dueDateTo };
       const cached = queryCache.get(userId, "tasks", cacheKey);
       if (cached) {
         return JSON.stringify(cached);
@@ -401,6 +405,10 @@ export const getTasksTool = new DynamicStructuredTool({
         .select("*")
         .order("due_date", { ascending: true })
         .order("due_time", { ascending: true, nullsFirst: false });
+
+      if (search) {
+        query = query.or(`title.ilike.%${search}%,description.ilike.%${search}%`);
+      }
 
       if (status) {
         query = query.eq("status", status);
@@ -440,7 +448,7 @@ export const getTasksTool = new DynamicStructuredTool({
       return JSON.stringify({
         tasks: result,
         count: result.length,
-        filters: { status, priority, studentId, dueDateFrom, dueDateTo },
+        filters: { search, status, priority, studentId, dueDateFrom, dueDateTo },
       });
     } catch (error) {
       console.error("Unexpected error in get_tasks:", error);
