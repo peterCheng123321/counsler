@@ -4,6 +4,8 @@ import { memo, useEffect, useState } from "react";
 import { User, Bot } from "lucide-react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { format } from "date-fns";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 
 interface ChatMessageProps {
   message: {
@@ -56,8 +58,49 @@ export const ChatMessage = memo(function ChatMessage({ message }: ChatMessagePro
               : "bg-surface/90 backdrop-blur-sm border border-border/50 text-text-primary rounded-bl-md hover:border-border"
           }`}
         >
-          <div className="text-sm md:text-base leading-relaxed whitespace-pre-wrap break-words">
-            {message.content}
+          <div className="text-sm md:text-base leading-relaxed prose prose-sm max-w-none dark:prose-invert">
+            {isUser ? (
+              <div className="whitespace-pre-wrap break-words text-white">
+                {message.content}
+              </div>
+            ) : (
+              <ReactMarkdown
+                remarkPlugins={[remarkGfm]}
+                components={{
+                  // Style markdown elements
+                  p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
+                  ul: ({ children }) => <ul className="mb-2 ml-4 list-disc">{children}</ul>,
+                  ol: ({ children }) => <ol className="mb-2 ml-4 list-decimal">{children}</ol>,
+                  li: ({ children }) => <li className="mb-1">{children}</li>,
+                  strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
+                  em: ({ children }) => <em className="italic">{children}</em>,
+                  code: ({ children, ...props }) => {
+                    const isInline = !props.className;
+                    return isInline ? (
+                      <code className="rounded bg-gray-100 dark:bg-gray-800 px-1 py-0.5 text-sm font-mono">
+                        {children}
+                      </code>
+                    ) : (
+                      <code className="block rounded-lg bg-gray-100 dark:bg-gray-800 p-3 text-sm font-mono overflow-x-auto my-2">
+                        {children}
+                      </code>
+                    );
+                  },
+                  a: ({ children, href }) => (
+                    <a
+                      href={href}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-primary hover:underline"
+                    >
+                      {children}
+                    </a>
+                  ),
+                }}
+              >
+                {message.content}
+              </ReactMarkdown>
+            )}
           </div>
         </div>
         {formattedTime && (
