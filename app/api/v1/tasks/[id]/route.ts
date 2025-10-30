@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { z } from "zod";
 import { DEMO_USER_ID } from "@/lib/constants";
+import { getTaskTool } from "@/lib/ai/langchain-tools";
 
 const updateTaskSchema = z.object({
   title: z.string().min(1).max(255).optional(),
@@ -22,49 +23,50 @@ export async function GET(
 ) {
   try {
     const { id } = await params;
-    const supabase = createAdminClient(); // Demo mode: Use admin client
-    // Demo mode: Skip authentication check
-    const userId = DEMO_USER_ID;
+    const supabase = createAdminClient();
 
-    const { data: task, error } = await supabase
-      .from("tasks")
-      .select("*")
-      .eq("id", id)
-      .eq("counselor_id", userId)
-      .single();
+    // Use LangChain tool to fetch task details
+    const result = await getTaskTool.func({ taskId: id });
 
-    if (error) {
-      console.error("Error fetching task:", error);
+    // Parse the tool result (it returns JSON string)
+    const parsed = JSON.parse(result);
+
+    // Check if there was an error
+    if (parsed.error) {
+      console.error("Task tool error:", parsed.error);
       return NextResponse.json(
-        { error: "Task not found", details: error.message },
-        { status: 404 }
+        { error: parsed.error, details: parsed.details },
+        { status: parsed.error === "Task not found" ? 404 : 500 }
       );
     }
 
     // Fetch student data if task has student_id
     let student = null;
-    if (task.student_id) {
+    if (parsed.student_id) {
       const { data: studentData } = await supabase
         .from("students")
         .select("id, first_name, last_name, email")
-        .eq("id", task.student_id)
-        .eq("counselor_id", userId)
+        .eq("id", parsed.student_id)
         .single();
-      
+
       if (studentData) {
         student = studentData;
       }
     }
 
     const taskWithStudent = {
-      ...task,
+      ...parsed,
       students: student,
     };
 
     return NextResponse.json({ data: taskWithStudent, success: true });
   } catch (error) {
+    console.error("Unexpected error in GET task:", error);
     return NextResponse.json(
-      { error: "Internal server error" },
+      {
+        error: "Internal server error",
+        details: error instanceof Error ? error.message : String(error)
+      },
       { status: 500 }
     );
   }

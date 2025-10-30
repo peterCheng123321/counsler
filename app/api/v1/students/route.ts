@@ -3,6 +3,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { queryCache } from "@/lib/cache/query-cache";
 import { z } from "zod";
 import { DEMO_USER_ID } from "@/lib/constants";
+import { getStudentsTool } from "@/lib/ai/langchain-tools";
 
 const studentSchema = z.object({
   firstName: z.string().min(2).max(50),
@@ -16,74 +17,41 @@ const studentSchema = z.object({
 
 export async function GET(request: NextRequest) {
   try {
-    const supabase = createAdminClient(); // Demo mode: Use admin client
-    // Demo mode: Skip authentication check
-    const userId = DEMO_USER_ID;
-
     const searchParams = request.nextUrl.searchParams;
     const search = searchParams.get("search");
     const graduationYear = searchParams.get("graduationYear");
     const progressMin = searchParams.get("progressMin");
     const progressMax = searchParams.get("progressMax");
 
-    // Check cache
-    const cacheKey = {
+    // Use LangChain tool to fetch students
+    const result = await getStudentsTool.func({
       search: search || undefined,
-      graduationYear: graduationYear || undefined,
-      progressMin: progressMin || undefined,
-      progressMax: progressMax || undefined,
-    };
-    const cached = queryCache.get(userId, "students", cacheKey);
-    if (cached) {
-      return NextResponse.json({ data: cached, success: true });
-    }
+      graduationYear: graduationYear ? parseInt(graduationYear) : undefined,
+      progressMin: progressMin ? parseInt(progressMin) : undefined,
+      progressMax: progressMax ? parseInt(progressMax) : undefined,
+    });
 
-    // For demo purposes: Allow all users to access all mock data
-    // Remove counselor_id filter to show all students in database
-    let query = supabase
-      .from("students")
-      .select("*")
-      .order("last_name", { ascending: true });
+    // Parse the tool result (it returns JSON string)
+    const parsed = JSON.parse(result);
 
-    if (search) {
-      query = query.or(
-        `first_name.ilike.%${search}%,last_name.ilike.%${search}%,email.ilike.%${search}%`
-      );
-    }
-
-    if (graduationYear) {
-      query = query.eq("graduation_year", parseInt(graduationYear));
-    }
-
-    if (progressMin) {
-      query = query.gte("application_progress", parseInt(progressMin));
-    }
-
-    if (progressMax) {
-      query = query.lte("application_progress", parseInt(progressMax));
-    }
-
-    const { data, error } = await query;
-
-    if (error) {
-      console.error("Students query error:", error);
+    // Check if there was an error
+    if (parsed.error) {
+      console.error("Students tool error:", parsed.error);
       return NextResponse.json(
-        { error: "Failed to fetch students", details: error.message },
+        { error: parsed.error, details: parsed.details },
         { status: 500 }
       );
     }
 
-    // If no data found, return empty array (mock data should be in DB)
-    // For demo purposes, all users can access any data in the database
-    const students = data || [];
-
-    // Cache the result
-    queryCache.set(userId, "students", students, cacheKey);
-
-    return NextResponse.json({ data: students, success: true });
+    // Return the students data
+    return NextResponse.json({ data: parsed.students, success: true });
   } catch (error) {
+    console.error("Unexpected error in GET students:", error);
     return NextResponse.json(
-      { error: "Internal server error" },
+      {
+        error: "Internal server error",
+        details: error instanceof Error ? error.message : String(error)
+      },
       { status: 500 }
     );
   }
