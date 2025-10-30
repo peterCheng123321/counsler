@@ -68,33 +68,108 @@ export const ChatMessage = memo(function ChatMessage({ message }: ChatMessagePro
                 remarkPlugins={[remarkGfm]}
                 components={{
                   // Style markdown elements
-                  p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
-                  ul: ({ children }) => <ul className="mb-2 ml-4 list-disc">{children}</ul>,
-                  ol: ({ children }) => <ol className="mb-2 ml-4 list-decimal">{children}</ol>,
-                  li: ({ children }) => <li className="mb-1">{children}</li>,
-                  strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
-                  em: ({ children }) => <em className="italic">{children}</em>,
+                  p: ({ children }) => <p className="mb-3 last:mb-0 leading-relaxed text-text-primary">{children}</p>,
+                  ul: ({ children }) => (
+                    <ul className="mb-3 ml-4 space-y-1.5 list-none">
+                      {children}
+                    </ul>
+                  ),
+                  ol: ({ children }) => (
+                    <ol className="mb-3 ml-4 space-y-1.5 list-decimal marker:text-primary marker:font-semibold">
+                      {children}
+                    </ol>
+                  ),
+                  li: ({ children }) => (
+                    <li className="flex gap-2 items-start">
+                      <span className="text-primary mt-1.5 shrink-0">•</span>
+                      <span className="flex-1">{children}</span>
+                    </li>
+                  ),
+                  strong: ({ children }) => (
+                    <strong className="font-semibold text-text-primary">{children}</strong>
+                  ),
+                  em: ({ children }) => <em className="italic text-text-secondary">{children}</em>,
+                  h1: ({ children }) => (
+                    <h1 className="text-xl font-bold mb-3 mt-4 text-text-primary border-b border-border pb-2">
+                      {children}
+                    </h1>
+                  ),
+                  h2: ({ children }) => (
+                    <h2 className="text-lg font-semibold mb-2 mt-3 text-text-primary">
+                      {children}
+                    </h2>
+                  ),
+                  h3: ({ children }) => (
+                    <h3 className="text-base font-semibold mb-2 mt-2 text-text-primary">
+                      {children}
+                    </h3>
+                  ),
+                  blockquote: ({ children }) => (
+                    <blockquote className="border-l-4 border-primary/50 pl-4 py-2 my-3 bg-primary/5 rounded-r text-text-secondary italic">
+                      {children}
+                    </blockquote>
+                  ),
                   code: ({ children, ...props }) => {
                     const isInline = !props.className;
                     return isInline ? (
-                      <code className="rounded bg-gray-100 dark:bg-gray-800 px-1 py-0.5 text-sm font-mono">
+                      <code className="rounded bg-primary/10 dark:bg-primary/20 px-1.5 py-0.5 text-sm font-mono text-primary-dark">
                         {children}
                       </code>
                     ) : (
-                      <code className="block rounded-lg bg-gray-100 dark:bg-gray-800 p-3 text-sm font-mono overflow-x-auto my-2">
+                      <code className="block rounded-lg bg-gray-100 dark:bg-gray-800 p-4 text-sm font-mono overflow-x-auto my-3 border border-border">
                         {children}
                       </code>
                     );
                   },
+                  pre: ({ children }) => (
+                    <pre className="rounded-lg bg-gray-100 dark:bg-gray-800 p-4 overflow-x-auto my-3 border border-border">
+                      {children}
+                    </pre>
+                  ),
+                  table: ({ children }) => (
+                    <div className="overflow-x-auto my-4 rounded-lg border border-border">
+                      <table className="min-w-full divide-y divide-border">
+                        {children}
+                      </table>
+                    </div>
+                  ),
+                  thead: ({ children }) => (
+                    <thead className="bg-surface">
+                      {children}
+                    </thead>
+                  ),
+                  tbody: ({ children }) => (
+                    <tbody className="divide-y divide-border bg-white dark:bg-gray-900">
+                      {children}
+                    </tbody>
+                  ),
+                  tr: ({ children }) => (
+                    <tr className="hover:bg-surface/50 transition-colors">
+                      {children}
+                    </tr>
+                  ),
+                  th: ({ children }) => (
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-text-primary uppercase tracking-wider">
+                      {children}
+                    </th>
+                  ),
+                  td: ({ children }) => (
+                    <td className="px-4 py-3 text-sm text-text-secondary">
+                      {children}
+                    </td>
+                  ),
                   a: ({ children, href }) => (
                     <a
                       href={href}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="text-primary hover:underline"
+                      className="text-primary hover:text-primary-hover underline decoration-primary/30 hover:decoration-primary transition-colors font-medium"
                     >
                       {children}
                     </a>
+                  ),
+                  hr: () => (
+                    <hr className="my-4 border-t-2 border-border" />
                   ),
                 }}
               >

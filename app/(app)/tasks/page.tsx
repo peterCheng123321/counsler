@@ -1,15 +1,17 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Plus, Filter, Calendar, List } from "lucide-react";
+import { Plus, Filter, Calendar, List, CheckCircle, Clock, AlertCircle, ListTodo } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { TaskCard } from "@/components/tasks/task-card";
 import { AddTaskModal } from "@/components/tasks/add-task-modal";
 import { TaskFilters } from "@/components/tasks/task-filters";
 import { CalendarView } from "@/components/tasks/calendar-view";
+import { StatsCard } from "@/components/charts/stats-card";
+import { TimelineChart, type TimelineData } from "@/components/charts/timeline-chart";
 import { apiClient, type Task } from "@/lib/api/client";
-import { format } from "date-fns";
+import { format, startOfWeek, endOfWeek, eachDayOfInterval, isSameDay } from "date-fns";
 
 export default function TasksPage() {
   const [showAddModal, setShowAddModal] = useState(false);
@@ -33,6 +35,52 @@ export default function TasksPage() {
   const pendingTasks = tasks.filter((t) => t.status === "pending");
   const inProgressTasks = tasks.filter((t) => t.status === "in_progress");
   const completedTasks = tasks.filter((t) => t.status === "completed");
+
+  // Calculate statistics
+  const stats = useMemo(() => {
+    const now = new Date();
+    const weekStart = startOfWeek(now);
+    const weekEnd = endOfWeek(now);
+
+    // Overdue tasks (pending or in_progress with past due date)
+    const overdueTasks = tasks.filter((t) => {
+      if (t.status === "completed" || !t.due_date) return false;
+      return new Date(t.due_date) < now;
+    }).length;
+
+    // Tasks due this week
+    const thisWeekTasks = tasks.filter((t) => {
+      if (!t.due_date) return false;
+      const dueDate = new Date(t.due_date);
+      return dueDate >= weekStart && dueDate <= weekEnd;
+    }).length;
+
+    // Weekly timeline data
+    const weekDays = eachDayOfInterval({ start: weekStart, end: weekEnd });
+    const timelineData: TimelineData[] = weekDays.map((day) => {
+      const dayTasks = tasks.filter((t) => {
+        if (!t.due_date) return false;
+        return isSameDay(new Date(t.due_date), day);
+      });
+
+      return {
+        name: format(day, "EEE"),
+        pending: dayTasks.filter((t) => t.status === "pending").length,
+        inProgress: dayTasks.filter((t) => t.status === "in_progress").length,
+        completed: dayTasks.filter((t) => t.status === "completed").length,
+      };
+    });
+
+    return {
+      total: tasks.length,
+      pending: pendingTasks.length,
+      inProgress: inProgressTasks.length,
+      completed: completedTasks.length,
+      overdue: overdueTasks,
+      thisWeek: thisWeekTasks,
+      timelineData,
+    };
+  }, [tasks, pendingTasks, inProgressTasks, completedTasks]);
 
   return (
     <div className="space-y-6">
@@ -69,6 +117,50 @@ export default function TasksPage() {
           </Button>
         </div>
       </div>
+
+      {/* Statistics Cards */}
+      {!isLoading && !error && tasks.length > 0 && (
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <StatsCard
+            title="Total Tasks"
+            value={stats.total}
+            icon={ListTodo}
+            iconColor="text-blue-600"
+            description="All tasks in system"
+          />
+          <StatsCard
+            title="Pending"
+            value={stats.pending}
+            icon={Clock}
+            iconColor="text-orange-600"
+            description="Tasks awaiting action"
+          />
+          <StatsCard
+            title="Overdue"
+            value={stats.overdue}
+            icon={AlertCircle}
+            iconColor="text-red-600"
+            description="Tasks past due date"
+          />
+          <StatsCard
+            title="Completed"
+            value={stats.completed}
+            icon={CheckCircle}
+            iconColor="text-green-600"
+            description="Successfully finished"
+          />
+        </div>
+      )}
+
+      {/* Weekly Timeline Chart */}
+      {!isLoading && !error && tasks.length > 0 && (
+        <div className="rounded-xl border border-border bg-surface p-6 shadow-sm">
+          <TimelineChart
+            data={stats.timelineData}
+            title="This Week's Task Timeline"
+          />
+        </div>
+      )}
 
       {/* Filters */}
       <div className="flex items-center gap-4">

@@ -1,13 +1,15 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Plus, Search, Filter } from "lucide-react";
+import { Plus, Search, Filter, Users, GraduationCap, Target, TrendingUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { StudentCard } from "@/components/students/student-card";
 import { AddStudentModal } from "@/components/students/add-student-modal";
 import { StudentFilters } from "@/components/students/student-filters";
+import { StatsCard } from "@/components/charts/stats-card";
+import { ProgressChart, type ProgressData } from "@/components/charts/progress-chart";
 import { apiClient, type Student } from "@/lib/api/client";
 
 export default function StudentsPage() {
@@ -30,6 +32,50 @@ export default function StudentsPage() {
 
   const students = data?.data || [];
 
+  // Calculate statistics
+  const stats = useMemo(() => {
+    const total = students.length;
+    const avgProgress =
+      students.length > 0
+        ? Math.round(
+            students.reduce((sum, s) => sum + (s.application_progress || 0), 0) /
+              students.length
+          )
+        : 0;
+
+    // Progress distribution
+    const lowProgress = students.filter((s) => (s.application_progress || 0) < 30).length;
+    const mediumProgress = students.filter(
+      (s) => (s.application_progress || 0) >= 30 && (s.application_progress || 0) < 70
+    ).length;
+    const highProgress = students.filter((s) => (s.application_progress || 0) >= 70).length;
+
+    // Graduation years
+    const graduationYears = new Map<number, number>();
+    students.forEach((s) => {
+      if (s.graduation_year) {
+        graduationYears.set(
+          s.graduation_year,
+          (graduationYears.get(s.graduation_year) || 0) + 1
+        );
+      }
+    });
+
+    const currentYear = new Date().getFullYear();
+    const thisYear = graduationYears.get(currentYear) || 0;
+
+    return {
+      total,
+      avgProgress,
+      thisYear,
+      progressDistribution: [
+        { name: "Low Progress (0-30%)", value: lowProgress, color: "#ef4444" },
+        { name: "Medium Progress (30-70%)", value: mediumProgress, color: "#f59e0b" },
+        { name: "High Progress (70-100%)", value: highProgress, color: "#10b981" },
+      ] as ProgressData[],
+    };
+  }, [students]);
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -47,6 +93,50 @@ export default function StudentsPage() {
           Add Student
         </Button>
       </div>
+
+      {/* Statistics Cards */}
+      {!isLoading && !error && students.length > 0 && (
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <StatsCard
+            title="Total Students"
+            value={stats.total}
+            icon={Users}
+            iconColor="text-blue-600"
+            description="Active students in system"
+          />
+          <StatsCard
+            title="Average Progress"
+            value={`${stats.avgProgress}%`}
+            icon={Target}
+            iconColor="text-purple-600"
+            description="Overall application progress"
+          />
+          <StatsCard
+            title="Graduating This Year"
+            value={stats.thisYear}
+            icon={GraduationCap}
+            iconColor="text-green-600"
+            description={`Class of ${new Date().getFullYear()}`}
+          />
+          <StatsCard
+            title="High Progress"
+            value={stats.progressDistribution[2].value}
+            icon={TrendingUp}
+            iconColor="text-orange-600"
+            description="Students above 70% progress"
+          />
+        </div>
+      )}
+
+      {/* Progress Distribution Chart */}
+      {!isLoading && !error && students.length > 0 && (
+        <div className="rounded-xl border border-border bg-surface p-6 shadow-sm">
+          <ProgressChart
+            data={stats.progressDistribution}
+            title="Application Progress Distribution"
+          />
+        </div>
+      )}
 
       {/* Search and Filters */}
       <div className="flex flex-col sm:flex-row gap-4">
