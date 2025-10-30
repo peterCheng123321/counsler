@@ -1,20 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { DEMO_USER_ID } from "@/lib/constants";
 
 export async function GET(request: NextRequest) {
   try {
-    const supabase = await createClient();
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-
-    if (authError || !user) {
-      console.error("Auth error:", authError);
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    // Demo mode: Use admin client to bypass RLS
+    const supabase = createAdminClient();
+    const userId = DEMO_USER_ID;
 
     const { data: conversations, error } = await supabase
       .from("conversations")
       .select("id, title, updated_at")
-      .eq("counselor_id", user.id)
+      .eq("counselor_id", userId)
       .order("updated_at", { ascending: false });
 
     if (error) {

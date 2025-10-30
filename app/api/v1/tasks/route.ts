@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { queryCache } from "@/lib/cache/query-cache";
 import { z } from "zod";
+import { DEMO_USER_ID } from "@/lib/constants";
+import { getTasksTool } from "@/lib/ai/langchain-tools";
 
 const taskSchema = z.object({
   title: z.string().min(1).max(255),
@@ -17,16 +19,7 @@ const taskSchema = z.object({
 
 export async function GET(request: NextRequest) {
   try {
-    const supabase = await createClient();
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser();
-
-    if (authError || !user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
+    const supabase = createAdminClient();
     const searchParams = request.nextUrl.searchParams;
     const status = searchParams.get("status");
     const priority = searchParams.get("priority");
@@ -34,75 +27,40 @@ export async function GET(request: NextRequest) {
     const dueDateFrom = searchParams.get("dueDateFrom");
     const dueDateTo = searchParams.get("dueDateTo");
 
-    // Check cache
-    const cacheKey = {
-      status: status || undefined,
-      priority: priority || undefined,
+    // Use LangChain tool to fetch tasks
+    const result = await getTasksTool.func({
+      status: status as "pending" | "in_progress" | "completed" | "cancelled" | undefined,
+      priority: priority as "low" | "medium" | "high" | undefined,
       studentId: studentId || undefined,
       dueDateFrom: dueDateFrom || undefined,
       dueDateTo: dueDateTo || undefined,
-    };
-    const cached = queryCache.get(user.id, "tasks", cacheKey);
-    if (cached) {
-      return NextResponse.json({ data: cached, success: true });
-    }
+    });
 
-    // For demo purposes: Allow all users to access all mock data
-    // Remove counselor_id filter to show all tasks in database
-    let query = supabase
-      .from("tasks")
-      .select("*")
-      .order("due_date", { ascending: true })
-      .order("due_time", { ascending: true, nullsFirst: false });
+    // Parse the tool result (it returns JSON string)
+    const parsed = JSON.parse(result);
 
-    if (status) {
-      query = query.eq("status", status);
-    }
-
-    if (priority) {
-      query = query.eq("priority", priority);
-    }
-
-    if (studentId) {
-      query = query.eq("student_id", studentId);
-    }
-
-    if (dueDateFrom) {
-      query = query.gte("due_date", dueDateFrom);
-    }
-
-    if (dueDateTo) {
-      query = query.lte("due_date", dueDateTo);
-    }
-
-    const { data: tasks, error } = await query;
-
-    if (error) {
-      console.error("Tasks query error:", error);
+    // Check if there was an error
+    if (parsed.error) {
+      console.error("Tasks tool error:", parsed.error);
       return NextResponse.json(
-        {
-          error: "Failed to fetch tasks",
-          details: error.message,
-          code: error.code,
-          hint: error.hint
-        },
+        { error: parsed.error, details: parsed.details },
         { status: 500 }
       );
     }
 
-    // Fetch students for tasks that have student_id
-    const studentIds = (tasks || [])
-      .map(task => task.student_id)
-      .filter((id): id is string => id !== null && id !== undefined);
-    
+    // Fetch student data for tasks that have student_id
+    const tasks = parsed.tasks;
+    const studentIds = tasks
+      .map((task: any) => task.student_id)
+      .filter((id: any): id is string => id !== null && id !== undefined);
+
     let studentsMap: Record<string, any> = {};
     if (studentIds.length > 0) {
-      // For demo: Fetch all students, not just ones matching counselor_id
       const { data: students, error: studentsError } = await supabase
         .from("students")
         .select("id, first_name, last_name, email")
         .in("id", studentIds);
-      
+
       if (!studentsError && students) {
         studentsMap = students.reduce((acc, student) => {
           acc[student.id] = student;
@@ -112,16 +70,10 @@ export async function GET(request: NextRequest) {
     }
 
     // Combine tasks with student data
-    const tasksWithStudents = (tasks || []).map(task => ({
+    const tasksWithStudents = tasks.map((task: any) => ({
       ...task,
       students: task.student_id ? studentsMap[task.student_id] || null : null,
     }));
-
-    // For demo purposes, all users can access any data in the database
-    // Mock data should already be in DB, so we return what we found
-
-    // Cache the result
-    queryCache.set(user.id, "tasks", tasksWithStudents, cacheKey);
 
     return NextResponse.json({ data: tasksWithStudents, success: true });
   } catch (error) {
@@ -138,15 +90,9 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const supabase = await createClient();
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser();
-
-    if (authError || !user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const supabase = createAdminClient(); // Demo mode: Use admin client
+    // Demo mode: Skip authentication check
+    const userId = DEMO_USER_ID;
 
     const body = await request.json();
     const validatedData = taskSchema.parse(body);
@@ -154,7 +100,7 @@ export async function POST(request: NextRequest) {
     const { data: task, error } = await supabase
       .from("tasks")
       .insert({
-        counselor_id: user.id,
+        counselor_id: userId,
         student_id: validatedData.studentId || null,
         title: validatedData.title,
         description: validatedData.description,
@@ -183,7 +129,7 @@ export async function POST(request: NextRequest) {
         .from("students")
         .select("id, first_name, last_name, email")
         .eq("id", task.student_id)
-        .eq("counselor_id", user.id)
+        .eq("counselor_id", userId)
         .single();
       
       if (studentData) {
@@ -197,7 +143,7 @@ export async function POST(request: NextRequest) {
     };
 
     // Invalidate cache
-    queryCache.invalidateUser(user.id);
+    queryCache.invalidateUser(userId);
 
     return NextResponse.json({ data: taskWithStudent, success: true }, { status: 201 });
   } catch (error) {

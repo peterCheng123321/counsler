@@ -56,11 +56,11 @@ export function TaskFilters({ filters, onFiltersChange }: TaskFiltersProps) {
           <div className="space-y-2">
             <Label>Status</Label>
             <Select
-              value={filters.status || ""}
+              value={filters.status || "all"}
               onValueChange={(value) =>
                 onFiltersChange({
                   ...filters,
-                  status: value || undefined,
+                  status: value === "all" ? undefined : value,
                 })
               }
             >
@@ -68,7 +68,7 @@ export function TaskFilters({ filters, onFiltersChange }: TaskFiltersProps) {
                 <SelectValue placeholder="All statuses" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">All statuses</SelectItem>
+                <SelectItem value="all">All statuses</SelectItem>
                 <SelectItem value="pending">Pending</SelectItem>
                 <SelectItem value="in_progress">In Progress</SelectItem>
                 <SelectItem value="completed">Completed</SelectItem>
@@ -81,11 +81,11 @@ export function TaskFilters({ filters, onFiltersChange }: TaskFiltersProps) {
           <div className="space-y-2">
             <Label>Priority</Label>
             <Select
-              value={filters.priority || ""}
+              value={filters.priority || "all"}
               onValueChange={(value) =>
                 onFiltersChange({
                   ...filters,
-                  priority: value || undefined,
+                  priority: value === "all" ? undefined : value,
                 })
               }
             >
@@ -93,7 +93,7 @@ export function TaskFilters({ filters, onFiltersChange }: TaskFiltersProps) {
                 <SelectValue placeholder="All priorities" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">All priorities</SelectItem>
+                <SelectItem value="all">All priorities</SelectItem>
                 <SelectItem value="low">Low</SelectItem>
                 <SelectItem value="medium">Medium</SelectItem>
                 <SelectItem value="high">High</SelectItem>

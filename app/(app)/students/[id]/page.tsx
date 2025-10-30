@@ -1,13 +1,25 @@
 "use client";
 
-import { use } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft, Edit, MoreVertical } from "lucide-react";
+import { use, useState, useRef, useEffect } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { ArrowLeft, Edit, MoreVertical, Send, GraduationCap, Mail, Calendar, TrendingUp } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { ChatMessage } from "@/components/chatbot/chat-message";
 import { apiClient } from "@/lib/api/client";
+
+interface Message {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+  timestamp: Date;
+}
+
+type TabId = "chatbot" | "colleges" | "essays" | "profile" | "notes";
 
 export default function StudentDetailPage({
   params,
@@ -15,6 +27,13 @@ export default function StudentDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = use(params);
+  const queryClient = useQueryClient();
+  const [activeTab, setActiveTab] = useState<TabId>("chatbot");
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [input, setInput] = useState("");
+  const [isTyping, setIsTyping] = useState(false);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const { data, isLoading, error } = useQuery({
     queryKey: ["student", id],
@@ -22,6 +41,72 @@ export default function StudentDetailPage({
   });
 
   const student = data?.data;
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
+
+  useEffect(() => {
+    if (textareaRef.current) {
+      textareaRef.current.style.height = "52px";
+      if (input) {
+        textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 200)}px`;
+      }
+    }
+  }, [input]);
+
+  const handleSendMessage = async () => {
+    if (!input.trim() || isTyping) return;
+
+    const userMessage: Message = {
+      id: Date.now().toString(),
+      role: "user",
+      content: input.trim(),
+      timestamp: new Date(),
+    };
+
+    setMessages((prev) => [...prev, userMessage]);
+    setInput("");
+    setIsTyping(true);
+
+    try {
+      // Call chat API with student context
+      const contextMessage = `I'm asking about student ${student?.first_name} ${student?.last_name} (ID: ${id}). ${input.trim()}`;
+
+      const response = await fetch("/api/v1/chatbot/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          message: contextMessage,
+          stream: false,
+        }),
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        const assistantMessage: Message = {
+          id: (Date.now() + 1).toString(),
+          role: "assistant",
+          content: result.data.message || "I received your message.",
+          timestamp: new Date(),
+        };
+        setMessages((prev) => [...prev, assistantMessage]);
+      } else {
+        throw new Error(result.error || "Failed to get response");
+      }
+    } catch (error) {
+      const errorMessage: Message = {
+        id: (Date.now() + 1).toString(),
+        role: "assistant",
+        content: "Sorry, I encountered an error. Please try again.",
+        timestamp: new Date(),
+      };
+      setMessages((prev) => [...prev, errorMessage]);
+    } finally {
+      setIsTyping(false);
+    }
+  };
 
   if (isLoading) {
     return (
@@ -42,6 +127,14 @@ export default function StudentDetailPage({
 
   const initials = `${student.first_name[0]}${student.last_name[0]}`.toUpperCase();
   const fullName = `${student.first_name} ${student.last_name}`;
+
+  const tabs = [
+    { id: "chatbot" as TabId, label: "AI Assistant", icon: "💬" },
+    { id: "profile" as TabId, label: "Profile", icon: "👤" },
+    { id: "colleges" as TabId, label: "Colleges", icon: "🏛️" },
+    { id: "essays" as TabId, label: "Essays", icon: "📝" },
+    { id: "notes" as TabId, label: "Notes", icon: "📋" },
+  ];
 
   return (
     <div className="space-y-6">
@@ -106,17 +199,12 @@ export default function StudentDetailPage({
 
       {/* Tab Navigation */}
       <div className="flex gap-1 rounded-xl bg-background p-1">
-        {[
-          { id: "chatbot", label: "Chatbot", icon: "💬" },
-          { id: "colleges", label: "Colleges", icon: "🏛️" },
-          { id: "essays", label: "Essays", icon: "📝" },
-          { id: "profile", label: "Profile", icon: "👤" },
-          { id: "notes", label: "Notes", icon: "📋" },
-        ].map((tab) => (
+        {tabs.map((tab) => (
           <button
             key={tab.id}
+            onClick={() => setActiveTab(tab.id)}
             className="flex-1 rounded-lg px-4 py-3 text-sm font-semibold text-text-secondary transition-all hover:bg-surface hover:text-primary data-[active=true]:bg-surface data-[active=true]:text-primary data-[active=true]:shadow-sm"
-            data-active={tab.id === "chatbot"}
+            data-active={tab.id === activeTab}
           >
             <span className="mr-2">{tab.icon}</span>
             {tab.label}
@@ -125,13 +213,168 @@ export default function StudentDetailPage({
       </div>
 
       {/* Tab Content */}
-      <div className="rounded-lg border border-border bg-surface p-6">
-        <p className="text-text-secondary">
-          Tab content will be implemented next. Student ID: {id}
-        </p>
+      <div className="rounded-lg border border-border bg-surface">
+        {/* Chatbot Tab */}
+        {activeTab === "chatbot" && (
+          <div className="flex flex-col h-[600px]">
+            <div className="p-4 border-b border-border">
+              <h2 className="text-lg font-semibold text-text-primary">AI Assistant for {student.first_name}</h2>
+              <p className="text-sm text-text-secondary">Ask questions about this student&apos;s application, deadlines, or recommendations</p>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-4 space-y-4">
+              {messages.length === 0 && (
+                <div className="flex flex-col items-center justify-center h-full text-center">
+                  <div className="text-6xl mb-4">💬</div>
+                  <h3 className="text-xl font-semibold text-text-primary mb-2">
+                    Start a conversation
+                  </h3>
+                  <p className="text-text-secondary max-w-md">
+                    Ask me anything about {student.first_name}&apos;s college applications, deadlines, essays, or get recommendations.
+                  </p>
+                </div>
+              )}
+
+              {messages.map((message) => (
+                <ChatMessage key={message.id} message={message} />
+              ))}
+
+              {isTyping && (
+                <div className="flex gap-2 items-center text-text-secondary">
+                  <div className="w-2 h-2 bg-primary rounded-full animate-bounce" />
+                  <div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: "0.1s" }} />
+                  <div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: "0.2s" }} />
+                </div>
+              )}
+
+              <div ref={messagesEndRef} />
+            </div>
+
+            <div className="p-4 border-t border-border">
+              <div className="flex gap-2">
+                <textarea
+                  ref={textareaRef}
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !e.shiftKey) {
+                      e.preventDefault();
+                      handleSendMessage();
+                    }
+                  }}
+                  placeholder="Ask about this student..."
+                  className="flex-1 resize-none rounded-lg border border-border bg-background px-4 py-3 text-sm text-text-primary placeholder-text-tertiary focus:outline-none focus:ring-2 focus:ring-primary"
+                  rows={1}
+                />
+                <Button
+                  onClick={handleSendMessage}
+                  disabled={!input.trim() || isTyping}
+                  className="h-auto"
+                >
+                  <Send className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Profile Tab */}
+        {activeTab === "profile" && (
+          <div className="p-6 space-y-6">
+            <div>
+              <h2 className="text-xl font-semibold text-text-primary mb-4">Academic Profile</h2>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <Card>
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-sm font-medium text-text-secondary">GPA (Unweighted)</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold text-text-primary">
+                      {student.gpa_unweighted?.toFixed(2) || "N/A"}
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-sm font-medium text-text-secondary">GPA (Weighted)</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold text-text-primary">
+                      {student.gpa_weighted?.toFixed(2) || "N/A"}
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-sm font-medium text-text-secondary">Graduation Year</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="flex items-center gap-2">
+                      <GraduationCap className="h-5 w-5 text-primary" />
+                      <span className="text-2xl font-bold text-text-primary">{student.graduation_year}</span>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-sm font-medium text-text-secondary">Application Progress</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="flex items-center gap-2">
+                      <TrendingUp className="h-5 w-5 text-primary" />
+                      <span className="text-2xl font-bold text-text-primary">{student.application_progress}%</span>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+            </div>
+
+            <div>
+              <h2 className="text-xl font-semibold text-text-primary mb-4">Contact Information</h2>
+              <Card>
+                <CardContent className="pt-6">
+                  <div className="space-y-4">
+                    <div className="flex items-center gap-3">
+                      <Mail className="h-5 w-5 text-primary" />
+                      <div>
+                        <p className="text-sm text-text-secondary">Email</p>
+                        <p className="text-text-primary">{student.email}</p>
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          </div>
+        )}
+
+        {/* Colleges Tab */}
+        {activeTab === "colleges" && (
+          <div className="p-6">
+            <h2 className="text-xl font-semibold text-text-primary mb-4">College Applications</h2>
+            <p className="text-text-secondary">College application data will be displayed here.</p>
+          </div>
+        )}
+
+        {/* Essays Tab */}
+        {activeTab === "essays" && (
+          <div className="p-6">
+            <h2 className="text-xl font-semibold text-text-primary mb-4">Essays & Writing</h2>
+            <p className="text-text-secondary">Essay information will be displayed here.</p>
+          </div>
+        )}
+
+        {/* Notes Tab */}
+        {activeTab === "notes" && (
+          <div className="p-6">
+            <h2 className="text-xl font-semibold text-text-primary mb-4">Counselor Notes</h2>
+            <p className="text-text-secondary">Notes will be displayed here.</p>
+          </div>
+        )}
       </div>
     </div>
   );
 }
-
-

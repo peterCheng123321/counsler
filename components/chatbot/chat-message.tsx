@@ -1,6 +1,6 @@
 "use client";
 
-import { memo } from "react";
+import { memo, useEffect, useState } from "react";
 import { User, Bot } from "lucide-react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { format } from "date-fns";
@@ -16,6 +16,12 @@ interface ChatMessageProps {
 
 export const ChatMessage = memo(function ChatMessage({ message }: ChatMessageProps) {
   const isUser = message.role === "user";
+  const [formattedTime, setFormattedTime] = useState<string>("");
+
+  // Format time on client side only to avoid hydration mismatch
+  useEffect(() => {
+    setFormattedTime(format(message.timestamp, "h:mm a"));
+  }, [message.timestamp]);
 
   return (
     <div
@@ -50,13 +56,15 @@ export const ChatMessage = memo(function ChatMessage({ message }: ChatMessagePro
               : "bg-surface/90 backdrop-blur-sm border border-border/50 text-text-primary rounded-bl-md hover:border-border"
           }`}
         >
-          <p className="text-sm md:text-base leading-relaxed whitespace-pre-wrap break-words">
+          <div className="text-sm md:text-base leading-relaxed whitespace-pre-wrap break-words">
             {message.content}
-          </p>
+          </div>
         </div>
-        <span className="text-xs text-text-tertiary/80 px-1">
-          {format(message.timestamp, "h:mm a")}
-        </span>
+        {formattedTime && (
+          <span className="text-xs text-text-tertiary/80 px-1">
+            {formattedTime}
+          </span>
+        )}
       </div>
     </div>
   );
