@@ -20,6 +20,7 @@ import { findCollegeMatches, generateBalancedCollegeList } from "@/lib/intellige
 import { generateApplicationTimeline, createTimelineTasks } from "@/lib/intelligence/timeline-generator";
 import { scoreStudentActivities } from "@/lib/intelligence/activity-scorer";
 import { generateStrengthScorecard } from "@/lib/intelligence/strength-scorecard";
+import { smartSearch, findSimilarEssays, findSimilarStudents } from "@/lib/intelligence/semantic-search";
 
 export const aiTools: AITool[] = [
   {

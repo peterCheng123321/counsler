@@ -199,7 +199,6 @@ export async function POST(request: NextRequest) {
         });
       }
     }
->>>>>>> origin/main
 
     // Add current user message
     aiMessages.push({
