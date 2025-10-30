@@ -2,11 +2,11 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
-import { 
-  Calendar, 
-  AlertTriangle, 
-  TrendingUp, 
-  Sparkles, 
+import {
+  Calendar,
+  AlertTriangle,
+  TrendingUp,
+  Sparkles,
   Clock,
   Users,
   CheckCircle,
