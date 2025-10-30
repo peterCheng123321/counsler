@@ -82,8 +82,19 @@ ALTER TABLE agent_insights DISABLE ROW LEVEL SECURITY;
 ### Step 3: Click "Run" Button
 The SQL will execute and create the tables.
 
-### Step 4: Verify
-Run this verification query:
+### Step 4: **IMPORTANT - Reload Schema Cache**
+After creating the tables, you MUST reload the schema cache:
+
+1. In Supabase Dashboard, click on **Settings** (gear icon in left sidebar)
+2. Click **API** section
+3. Scroll down to find the **Schema** section
+4. Click the **Reload schema** button (or refresh icon)
+5. Wait for the confirmation message
+
+**This step is critical!** Without reloading the schema cache, Supabase won't see the new tables.
+
+### Step 5: Verify Tables Exist
+Run this verification query in SQL Editor:
 ```sql
 SELECT table_name FROM information_schema.tables
 WHERE table_schema = 'public' AND table_name LIKE 'agent_%';
@@ -94,8 +105,15 @@ You should see 3 tables:
 - agent_runs
 - agent_insights
 
-### Step 5: Refresh Agent Dashboard
-Go to http://localhost:3000/agent-dashboard and the page should load correctly!
+### Step 6: Test the API
+Navigate to http://localhost:3000/agent-dashboard - the page should now load without errors!
+
+You can also test the API directly:
+```bash
+curl http://localhost:3000/api/v1/agent/config
+```
+
+Should return success response instead of 500 error.
 
 ## What This Does
 - Creates 3 database tables for the agent system
@@ -105,14 +123,26 @@ Go to http://localhost:3000/agent-dashboard and the page should load correctly!
 
 ## Troubleshooting
 
-**"relation already exists" error**
-This is fine - tables are already created. Continue to next step.
+**Error: "Could not find the table 'public.agent_config' in the schema cache"**
+You forgot to reload the schema cache! Go to Supabase Dashboard → Settings → API → Reload schema
 
-**Agent dashboard still shows errors**
-1. Clear browser cache and refresh
-2. Check browser console for new errors
-3. Verify all 3 tables exist in Supabase
-4. Make sure RLS is disabled for all tables
+**"relation already exists" error when running SQL**
+This is fine - tables are already created. Continue to the schema reload step.
+
+**Agent dashboard still shows 500 errors after everything**
+1. **Did you reload the schema cache?** This is the most common issue!
+2. Go to Supabase Dashboard → Settings → API → Click "Reload schema"
+3. Wait 10-30 seconds for cache to refresh
+4. Refresh your browser
+5. Check the API: `curl http://localhost:3000/api/v1/agent/config`
+
+**Verification checklist:**
+- [ ] SQL ran successfully (tables created)
+- [ ] Schema cache was reloaded in Supabase Dashboard
+- [ ] All 3 tables appear in verification query
+- [ ] RLS is disabled for all 3 tables
+- [ ] Waited 30 seconds after schema reload
+- [ ] Refreshed browser
 
 **Need to delete and recreate tables**
 ```sql
