@@ -4,13 +4,9 @@ import { DEMO_USER_ID } from "@/lib/constants";
 
 export async function GET(request: NextRequest) {
   try {
-    const supabase = createAdminClient(); // Demo mode: Use admin client
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-
-    if (authError || !user) {
-      console.error("Auth error:", authError);
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    // Demo mode: Use admin client to bypass RLS
+    const supabase = createAdminClient();
+    const userId = DEMO_USER_ID;
 
     const { data: conversations, error } = await supabase
       .from("conversations")
