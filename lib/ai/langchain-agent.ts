@@ -35,6 +35,8 @@ export interface LangChainAgentConfig {
   temperature?: number;
   maxTokens?: number;
   streaming?: boolean;
+  onToken?: (token: string) => void;
+  onToolCall?: (toolName: string) => void;
 }
 
 /**
@@ -144,15 +146,47 @@ export async function runLangChainAgent(
     console.log(`[LangChain Agent] Iteration ${iterationCount}`);
     const iterationStart = Date.now();
 
-    // Invoke LLM
+    // Invoke LLM with streaming support
     const llmStart = Date.now();
-    const response = await llmWithTools.invoke(allMessages);
-    const llmDuration = Date.now() - llmStart;
-    console.log(`[LangChain Agent] LLM call completed in ${llmDuration}ms`);
+    let response;
+
+    if (config.streaming && config.onToken && iterationCount > 1) {
+      // Only stream on final response (after tools executed)
+      response = await llmWithTools.stream(allMessages);
+      let fullContent = "";
+
+      for await (const chunk of response) {
+        if (chunk.content) {
+          const token = chunk.content.toString();
+          fullContent += token;
+          config.onToken(token);
+        }
+      }
+
+      const llmDuration = Date.now() - llmStart;
+      console.log(`[LangChain Agent] LLM streaming completed in ${llmDuration}ms`);
+
+      // Return the accumulated content
+      return {
+        content: fullContent,
+        intermediateSteps: toolCalls,
+      };
+    } else {
+      response = await llmWithTools.invoke(allMessages);
+      const llmDuration = Date.now() - llmStart;
+      console.log(`[LangChain Agent] LLM call completed in ${llmDuration}ms`);
+    }
 
     // Check if there are tool calls
     if (response.tool_calls && response.tool_calls.length > 0) {
       console.log(`[LangChain Agent] Tool calls detected:`, response.tool_calls.map(tc => tc.name));
+
+      // Notify about tool calls if callback provided
+      if (config.onToolCall) {
+        for (const toolCall of response.tool_calls) {
+          config.onToolCall(toolCall.name);
+        }
+      }
 
       // Add assistant message with tool calls to history
       allMessages.push(response);

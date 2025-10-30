@@ -95,41 +95,47 @@ export async function POST(request: NextRequest) {
             let fullContent = "";
             let toolsUsed = false;
 
-            // Note: LangChain streaming is complex and may not stream tokens
-            // For now, we'll execute the agent and stream the result
-            console.log("Running LangChain agent...");
+            console.log("Running LangChain agent with streaming...");
 
             const result = await runLangChainAgent(messages, {
               temperature: 0.7,
               maxTokens: 2000,
-              streaming: false, // Disable LLM streaming for simplicity
+              streaming: true,
+              onToken: async (token) => {
+                // Stream tokens as they arrive from OpenAI
+                fullContent += token;
+                await sendSSEChunk(controller, {
+                  type: "token",
+                  content: token,
+                });
+              },
+              onToolCall: async (toolName) => {
+                toolsUsed = true;
+                // Send tool call notification
+                await sendSSEChunk(controller, {
+                  type: "tool_call",
+                  toolCall: {
+                    name: toolName,
+                    id: "langchain-tool",
+                  },
+                });
+              },
             });
 
-            fullContent = result.content;
+            // Use result content if streaming didn't populate fullContent
+            if (!fullContent && result.content) {
+              fullContent = result.content;
+
+              // Send the content if not streamed
+              await sendSSEChunk(controller, {
+                type: "token",
+                content: fullContent,
+              });
+            }
 
             // Check if tools were used
             if (result.intermediateSteps && result.intermediateSteps.length > 0) {
               toolsUsed = true;
-
-              // Send tool call notification
-              await sendSSEChunk(controller, {
-                type: "tool_call",
-                toolCall: {
-                  name: "tools",
-                  id: "langchain-tools",
-                },
-              });
-            }
-
-            // Stream the content word by word for better UX
-            const words = fullContent.split(" ");
-            for (const word of words) {
-              await sendSSEChunk(controller, {
-                type: "token",
-                content: word + " ",
-              });
-              // Small delay for smoother streaming
-              await new Promise((resolve) => setTimeout(resolve, 20));
             }
 
             // Save assistant response and update conversation timestamp in parallel
