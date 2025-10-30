@@ -341,10 +341,36 @@ export async function POST(request: NextRequest) {
                     console.log("Tool response stream completed naturally");
                   }
 
-                  // Only send fallback if absolutely no content was received
+                  // Provide fallback if no content was received
                   if (!toolResponseContent.trim()) {
-                    console.warn("Tool response stream returned empty content. Tool results:", toolMessages.map(m => m.content));
-                    // Don't send placeholder - let the AI model handle this
+                    console.warn("Tool response stream returned empty content. Providing summary of tool results.");
+                    // Generate a simple summary from tool results
+                    const toolResultsSummary = "I've retrieved the information from the database. Here's what I found:\n\n" +
+                      toolMessages
+                        .filter(m => m.role === "tool")
+                        .map(m => {
+                          try {
+                            const result = JSON.parse(m.content);
+                            if (Array.isArray(result)) {
+                              return `Found ${result.length} results.`;
+                            } else if (result.error) {
+                              return `Error: ${result.error}`;
+                            } else {
+                              return "Retrieved data successfully.";
+                            }
+                          } catch {
+                            return "Retrieved data successfully.";
+                          }
+                        })
+                        .join("\n");
+
+                    toolResponseContent = toolResultsSummary;
+
+                    // Send the fallback content as tokens
+                    await sendSSEChunk(controller, {
+                      type: "token",
+                      content: toolResultsSummary,
+                    });
                   }
 
                   // Save final response after tool processing
