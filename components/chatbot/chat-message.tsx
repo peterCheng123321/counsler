@@ -85,46 +85,41 @@ export const ChatMessage = memo(function ChatMessage({ message, enableTypewriter
               </div>
             ) : (
               <>
-              <ReactMarkdown
-                remarkPlugins={[remarkGfm]}
-                components={{
-                  // Style markdown elements
-                  p: ({ children }) => <p className="mb-3 last:mb-0 leading-relaxed text-text-primary">{children}</p>,
-                  ul: ({ children }) => (
-                    <ul className="mb-3 ml-4 space-y-1.5 list-none">
-                      {children}
-                    </ul>
-                  ),
-                  ol: ({ children }) => (
-                    <ol className="mb-3 ml-4 space-y-1.5 list-decimal marker:text-primary marker:font-semibold">
-                      {children}
-                    </ol>
-                  ),
-                  li: ({ children }) => (
-                    <li className="flex gap-2 items-start">
-                      <span className="text-primary mt-1.5 shrink-0">•</span>
-                      <span className="flex-1">{children}</span>
-                    </li>
-                  ),
-                  strong: ({ children }) => (
-                    <strong className="font-semibold text-text-primary">{children}</strong>
-                  ),
-                  em: ({ children }) => <em className="italic text-text-secondary">{children}</em>,
-                  h1: ({ children }) => (
-                    <h1 className="text-xl font-bold mb-3 mt-4 text-text-primary border-b border-border pb-2">
-                      {children}
-                    </h1>
-                  ),
-                  h2: ({ children }) => (
-                    <h2 className="text-lg font-semibold mb-2 mt-3 text-text-primary">
-                      {children}
-                    </h2>
-                  ),
-                  h3: ({ children }) => (
-                    <h3 className="text-base font-semibold mb-2 mt-2 text-text-primary">
-                      {children}
-                    </h3>
-                  ),
+                <ReactMarkdown
+                  remarkPlugins={[remarkGfm]}
+                  components={{
+                    // Style markdown elements
+                    p: ({ children }) => <p className="mb-3 last:mb-0 leading-relaxed text-text-primary">{children}</p>,
+                    ul: ({ children }) => (
+                      <ul className="mb-3 ml-4 space-y-1.5 list-disc">
+                        {children}
+                      </ul>
+                    ),
+                    ol: ({ children }) => (
+                      <ol className="mb-3 ml-4 space-y-1.5 list-decimal">
+                        {children}
+                      </ol>
+                    ),
+                    li: ({ children }) => (
+                      <li className="text-text-primary leading-relaxed">
+                        {children}
+                      </li>
+                    ),
+                    h1: ({ children }) => (
+                      <h1 className="text-xl font-bold mb-3 mt-4 text-text-primary">
+                        {children}
+                      </h1>
+                    ),
+                    h2: ({ children }) => (
+                      <h2 className="text-lg font-semibold mb-2 mt-3 text-text-primary">
+                        {children}
+                      </h2>
+                    ),
+                    h3: ({ children }) => (
+                      <h3 className="text-base font-semibold mb-2 mt-2 text-text-primary">
+                        {children}
+                      </h3>
+                    ),
                   blockquote: ({ children }) => (
                     <blockquote className="border-l-4 border-primary/50 pl-4 py-2 my-3 bg-primary/5 rounded-r text-text-secondary italic">
                       {children}

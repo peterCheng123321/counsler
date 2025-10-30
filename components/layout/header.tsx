@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { MessageCircle, Users, CheckSquare, Search, Bell, User, Sparkles } from "lucide-react";
+import { MessageCircle, Users, CheckSquare, Search, Bell, User, Sparkles, Brain } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
@@ -20,6 +20,7 @@ const navItems = [
   { href: "/chatbot", label: "Chatbot", icon: MessageCircle },
   { href: "/students", label: "Students", icon: Users },
   { href: "/tasks", label: "Tasks", icon: CheckSquare },
+  { href: "/agent-dashboard", label: "Agent", icon: Brain },
 ];
 
 interface HeaderProps {

@@ -224,9 +224,9 @@ function ChatbotContent() {
 
                           // Check if content contains pending_confirmation action
                           try {
-                            const pendingMatch = cleanedContent.match(/\{[\s\S]*?"status"\s*:\s*"pending_confirmation"[\s\S]*?\}/);
+                            const pendingMatch = cleanedContent.match(/(?<={\\\"status\\\":\\\"pending_confirmation\\\"})[^\\}]+/);
                             if (pendingMatch) {
-                              const actionData = JSON.parse(pendingMatch[0]);
+                              const actionData = JSON.parse(`{${pendingMatch[0]}}`);
                               setPendingAction({
                                 type: actionData.action?.split('_')[0] as "create" | "update" | "delete" | "generate" | "add",
                                 entity: actionData.entity,
@@ -237,10 +237,10 @@ function ChatbotContent() {
                               setShowConfirmation(true);
 
                               // Remove JSON from content, keep the message
-                              cleanedContent = actionData.message || cleanedContent.replace(pendingMatch[0], "");
+                              cleanedContent = actionData.message || cleanedContent.replace(`{${pendingMatch[0]}}`, "");
                             }
                           } catch (e) {
-                            // Not a JSON action, continue
+                            console.error("Error parsing pending action:", e);
                           }
 
                           // Remove any placeholder patterns
@@ -268,18 +268,21 @@ function ChatbotContent() {
             }
           }
         } catch (streamError) {
+          console.error("Stream error occurred:", streamError);
           throw new Error(streamError instanceof Error ? streamError.message : "Stream error occurred");
         }
 
         // Update conversation ID if new conversation was created
         if (conversationId && !selectedConversation) {
           setSelectedConversation(conversationId);
-          // Only invalidate conversations list when new conversation is created
+          // Invalidate conversations list when new conversation is created
           queryClient.invalidateQueries({ queryKey: ["conversations"] });
+          // Also invalidate the new conversation to ensure it's fresh
+          queryClient.invalidateQueries({ queryKey: ["conversation", conversationId] });
+        } else if (selectedConversation) {
+          // Invalidate current conversation after message is sent to ensure sync
+          queryClient.invalidateQueries({ queryKey: ["conversation", selectedConversation] });
         }
-        
-        // Don't invalidate current conversation - messages are already updated via streaming
-        // The conversation query will refresh naturally when staleTime expires
       } else {
         // Fallback to non-streaming
         if (response.success && response.data) {
@@ -297,7 +300,10 @@ function ChatbotContent() {
             )
           );
 
-          // Don't invalidate current conversation - messages are already updated in UI
+          // Invalidate current conversation to ensure database sync
+          if (selectedConversation) {
+            queryClient.invalidateQueries({ queryKey: ["conversation", selectedConversation] });
+          }
         } else {
           throw new Error(response.error || "Failed to get response");
         }
@@ -439,48 +445,72 @@ function ChatbotContent() {
           </div>
         </div>
 
-        {/* Input Area */}
-        <div className="border-t border-border/50 bg-gradient-to-t from-background via-background/95 to-background/80 p-5 md:p-6 backdrop-blur-xl shadow-[0_-4px_24px_rgba(0,0,0,0.04)] transition-all duration-500 ease-in-out">
-          <div className="mx-auto max-w-4xl">
-            <div className="flex items-end gap-3 rounded-2xl border-2 border-border/50 bg-surface/80 backdrop-blur-sm p-4 shadow-lg transition-all duration-300 ease-out hover:shadow-xl hover:border-primary/30 focus-within:border-primary focus-within:shadow-2xl focus-within:shadow-primary/20 focus-within:bg-surface/90">
-              <Button variant="ghost" size="icon" className="shrink-0 hover:bg-primary/10 transition-all duration-300 ease-out hover:scale-110">
-                <Paperclip className="h-5 w-5 text-text-secondary transition-colors duration-300" />
-              </Button>
-              <textarea
-                ref={textareaRef}
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyDown={handleKeyDown}
-                placeholder="Type your question or command here..."
-                className="flex-1 resize-none border-0 bg-transparent p-2 text-sm md:text-base outline-none placeholder:text-text-tertiary/60 focus:placeholder:text-text-tertiary/40 transition-all duration-300 ease-out"
-                rows={1}
-                style={{ maxHeight: "200px" }}
-              />
-              <Button
-                onClick={(e) => handleSend(e)}
-                disabled={!input.trim() || isTyping}
-                size="icon"
-                className="shrink-0 h-10 w-10 rounded-xl bg-primary hover:bg-primary-hover shadow-md hover:shadow-lg hover:scale-110 active:scale-95 transition-all duration-300 ease-out disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
-              >
-                {isTyping ? (
-                  <div className="flex gap-0.5">
-                    <div className="h-1.5 w-1.5 animate-bounce rounded-full bg-white [animation-delay:-0.3s]" />
-                    <div className="h-1.5 w-1.5 animate-bounce rounded-full bg-white [animation-delay:-0.15s]" />
-                    <div className="h-1.5 w-1.5 animate-bounce rounded-full bg-white" />
-                  </div>
-                ) : (
-                  <Send className="h-5 w-5" />
-                )}
-              </Button>
-            </div>
+        {/* Input Area - Modern Floating Design */}
+        <div className="border-t border-border/30 bg-gradient-to-t from-background via-background/98 to-transparent p-4 md:p-6 backdrop-blur-sm transition-all duration-500 ease-in-out">
+          <div className="mx-auto max-w-4xl space-y-3">
+            {/* Suggestion Chips - Above Input */}
             {messages.length > 0 && !isTyping && (
-              <div className="mt-5">
+              <div className="px-2 animate-fade-in transition-all duration-300">
                 <SuggestionChips
                   suggestions={welcomeSuggestions.slice(0, 3)}
                   onSuggestionClick={handleSuggestionClick}
                 />
               </div>
             )}
+
+            {/* Input Box - Modern Floating Style */}
+            <div className="group relative">
+              <div className="absolute inset-0 bg-gradient-to-r from-primary/20 via-primary/10 to-transparent rounded-2xl opacity-0 group-focus-within:opacity-100 blur-xl transition-all duration-300 ease-out" />
+              <div className="relative flex items-end gap-2.5 rounded-2xl border border-border/40 bg-surface/60 backdrop-blur-md p-3 md:p-4 shadow-lg hover:shadow-xl hover:border-border/60 group-focus-within:border-primary/50 group-focus-within:shadow-2xl group-focus-within:shadow-primary/10 transition-all duration-300 ease-out">
+                {/* Attachment Button */}
+                <Button 
+                  variant="ghost" 
+                  size="icon" 
+                  className="shrink-0 h-9 w-9 rounded-lg hover:bg-primary/10 text-text-secondary hover:text-primary transition-all duration-300 ease-out hover:scale-110 active:scale-95"
+                >
+                  <Paperclip className="h-4 w-4" />
+                </Button>
+
+                {/* Textarea */}
+                <textarea
+                  ref={textareaRef}
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  onKeyDown={handleKeyDown}
+                  placeholder="Ask anything about students, deadlines, or applications..."
+                  className="flex-1 resize-none border-0 bg-transparent p-2 text-sm md:text-base outline-none placeholder:text-text-tertiary/50 focus:placeholder:text-text-tertiary/30 transition-all duration-300 ease-out font-medium"
+                  rows={1}
+                  style={{ maxHeight: "120px" }}
+                />
+
+                {/* Send Button - Modern Design */}
+                <Button
+                  onClick={(e) => handleSend(e)}
+                  disabled={!input.trim() || isTyping}
+                  size="icon"
+                  className="shrink-0 h-9 w-9 rounded-lg bg-gradient-to-br from-primary to-primary-hover hover:shadow-lg hover:scale-110 active:scale-95 transition-all duration-300 ease-out disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:scale-100 text-white shadow-md"
+                >
+                  {isTyping ? (
+                    <div className="flex gap-0.5 items-center justify-center">
+                      <div className="h-1 w-1 animate-bounce rounded-full bg-white [animation-delay:-0.3s]" />
+                      <div className="h-1 w-1 animate-bounce rounded-full bg-white [animation-delay:-0.15s]" />
+                      <div className="h-1 w-1 animate-bounce rounded-full bg-white" />
+                    </div>
+                  ) : (
+                    <Send className="h-4 w-4" />
+                  )}
+                </Button>
+              </div>
+            </div>
+
+            {/* Helper Text */}
+            <div className="px-2 text-xs text-text-tertiary/50 flex items-center gap-2 transition-all duration-300">
+              <span>Press</span>
+              <kbd className="px-2 py-1 rounded bg-surface/80 border border-border/30 font-mono text-[10px] font-semibold">Enter</kbd>
+              <span>to send,</span>
+              <kbd className="px-2 py-1 rounded bg-surface/80 border border-border/30 font-mono text-[10px] font-semibold">Shift+Enter</kbd>
+              <span>for new line</span>
+            </div>
           </div>
         </div>
       </div>

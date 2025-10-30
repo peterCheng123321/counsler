@@ -11,7 +11,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ChatMessage } from "@/components/chatbot/chat-message";
-import { EssayEditor } from "@/components/essays/essay-editor";
+import { InlineEssayEditor } from "@/components/essays/inline-essay-editor";
 import { apiClient } from "@/lib/api/client";
 import { toast } from "sonner";
 
@@ -533,7 +533,7 @@ Now, I lead a quilting club at school where we create quilts for children in hos
                 Edit the essay and get AI-powered suggestions for improvement
               </p>
             </div>
-            <EssayEditor
+            <InlineEssayEditor
               essayId={essay.id}
               initialTitle={essay.title}
               initialContent={essay.content}
