@@ -1,42 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { aiServiceManager } from "@/lib/ai";
-import { aiTools, executeTool } from "@/lib/ai/tools";
-import { AIMessage, AIToolCall } from "@/lib/ai/types";
-import { queryCache } from "@/lib/cache/query-cache";
+import { runLangChainAgent } from "@/lib/ai/langchain-agent";
 import { z } from "zod";
 import { DEMO_USER_ID } from "@/lib/constants";
 
 const chatMessageSchema = z.object({
   conversationId: z.string().uuid().optional(),
   message: z.string().min(1).max(10000),
-  stream: z.boolean().optional().default(true),
+  stream: z.boolean().optional().default(false), // LangChain streaming works differently
 });
 
 const HISTORY_LIMIT = 10; // Limit conversation history to last 10 messages
-
-const SYSTEM_PROMPT = `You are an AI assistant for a college application management platform called CAMP. You help college counselors manage student applications, track deadlines, and generate Letters of Recommendation.
-
-You have access to the following tools:
-- get_students: Query students with filters (search, graduation year, progress)
-- get_students_by_application_type: Query students by application type (ED=Early Decision, EA=Early Action, RD=Regular Decision, Rolling)
-- get_student: Get detailed information about a specific student
-- get_tasks: Query tasks with filters (status, priority, date range, student)
-- get_task: Get detailed information about a specific task
-- get_upcoming_deadlines: Get tasks with upcoming deadlines
-
-When users ask about students by application type (e.g., "students applying Early Decision"), use get_students_by_application_type with applicationType="ED" for Early Decision, "EA" for Early Action, "RD" for Regular Decision, or "Rolling" for Rolling admission.
-
-When users ask about students, tasks, or deadlines, use the appropriate tools to fetch real data from the database. Then provide a helpful response based on the actual data.
-
-Key guidelines:
-- Always use tools when users ask about specific data (students, tasks, deadlines)
-- Provide clear, formatted responses with the actual data
-- Be concise but thorough in your responses
-- Format dates in a readable format (e.g., "January 15, 2025")
-- If data is not found, acknowledge it politely
-
-Always be helpful and professional.`;
 
 async function sendSSEChunk(controller: ReadableStreamDefaultController, data: any) {
   try {
@@ -50,8 +24,7 @@ async function sendSSEChunk(controller: ReadableStreamDefaultController, data: a
 
 export async function POST(request: NextRequest) {
   try {
-    const supabase = createAdminClient(); // Demo mode: Use admin client
-    // Demo mode: Skip authentication check
+    const supabase = createAdminClient();
     const userId = DEMO_USER_ID;
 
     const body = await request.json();
@@ -99,339 +72,98 @@ export async function POST(request: NextRequest) {
     // Get conversation history (limited to last N messages)
     const { data: allHistory } = await supabase
       .from("messages")
-      .select("role, content, tool_calls, tool_call_id")
+      .select("role, content")
       .eq("conversation_id", convId)
       .order("created_at", { ascending: true });
 
-    // Limit history to last N messages (keep system context)
-    const limitedHistory = allHistory
-      ? allHistory.slice(-HISTORY_LIMIT)
-      : [];
+    // Limit history to last N messages
+    const limitedHistory = allHistory ? allHistory.slice(-HISTORY_LIMIT) : [];
 
-    // Build messages for AI, ensuring tool messages are properly paired
-    const aiMessages: AIMessage[] = [];
-    
-    for (let i = 0; i < limitedHistory.length; i++) {
-      const msg = limitedHistory[i];
-      
-      // Handle assistant messages with tool_calls
-      if (msg.role === "assistant" && msg.tool_calls && Array.isArray(msg.tool_calls) && msg.tool_calls.length > 0) {
-        // Collect all tool_call_ids we need responses for
-        const toolCallIds = msg.tool_calls.map((tc: any) => tc.id).filter(Boolean);
-        
-        // Look ahead to find all tool responses
-        const remainingMessages = limitedHistory.slice(i + 1);
-        const foundToolResponses: any[] = [];
-        
-        for (const toolCallId of toolCallIds) {
-          const toolMsg = remainingMessages.find((m) => m.role === "tool" && m.tool_call_id === toolCallId);
-          if (toolMsg) {
-            foundToolResponses.push(toolMsg);
-          }
-        }
-        
-        // Only include this assistant message if ALL tool responses are found
-        if (foundToolResponses.length === toolCallIds.length) {
-          // Add assistant message with tool_calls
-          aiMessages.push({
-            role: "assistant",
-            content: msg.content,
-            tool_calls: msg.tool_calls as AIToolCall[],
-          });
-          
-          // Add all tool response messages in order
-          for (const toolMsg of foundToolResponses) {
-            aiMessages.push({
-              role: "tool",
-              content: toolMsg.content,
-              tool_call_id: toolMsg.tool_call_id,
-            });
-          }
-          
-          // Skip the tool messages we just added
-          i += foundToolResponses.length;
-        } else {
-          // Not all tool responses found - skip this assistant message entirely
-          // or add it without tool_calls to avoid errors
-          console.warn(`Skipping assistant message with incomplete tool responses. Found ${foundToolResponses.length}/${toolCallIds.length} responses.`);
-          // Skip it entirely to avoid errors
-        }
-        continue;
-      }
-      
-      // Handle tool messages - skip them here as they're handled above
-      if (msg.role === "tool") {
-        continue;
-      }
-      
-      // Include user, assistant (without tool_calls), and system messages
-      if (msg.role === "user" || msg.role === "system" || (msg.role === "assistant" && (!msg.tool_calls || msg.tool_calls.length === 0))) {
-        aiMessages.push({
-          role: msg.role,
-          content: msg.content,
-          tool_calls: undefined,
-          tool_call_id: undefined,
-        });
-      }
-    }
-
-    // Add current user message
-    aiMessages.push({
-      role: "user",
-      content: message,
-    });
+    // Build messages for LangChain agent
+    const messages = [
+      ...limitedHistory.map((msg) => ({
+        role: msg.role,
+        content: msg.content,
+      })),
+    ];
 
     if (stream) {
-      // Streaming response
-      const stream = new ReadableStream({
+      // Streaming response with SSE
+      const responseStream = new ReadableStream({
         async start(controller) {
           try {
             let fullContent = "";
-            let toolCalls: AIToolCall[] = [];
+            let toolsUsed = false;
 
-            // Stream AI response
-            for await (const chunk of aiServiceManager.chatStream(aiMessages, {
-              systemPrompt: SYSTEM_PROMPT,
+            // Note: LangChain streaming is complex and may not stream tokens
+            // For now, we'll execute the agent and stream the result
+            console.log("Running LangChain agent...");
+
+            const result = await runLangChainAgent(messages, {
               temperature: 0.7,
               maxTokens: 2000,
-              tools: aiTools,
-            })) {
-              if (chunk.type === "token" && chunk.content) {
-                fullContent += chunk.content;
-                await sendSSEChunk(controller, {
-                  type: "token",
-                  content: chunk.content,
-                });
-              } else if (chunk.type === "tool_call" && chunk.toolCall) {
-                toolCalls.push(chunk.toolCall);
-                // Send tool_call event to frontend for UI state, not as content
-                await sendSSEChunk(controller, {
-                  type: "tool_call",
-                  toolCall: chunk.toolCall,
-                });
-              } else if (chunk.type === "error") {
-                await sendSSEChunk(controller, {
-                  type: "error",
-                  error: chunk.error,
-                });
-                controller.close();
-                return;
-              } else if (chunk.type === "done") {
-                // Process tool calls if any
-                if (toolCalls.length > 0) {
-                  // Only save assistant message with tool_calls if there's content
-                  // Some AI models send tool calls without initial content
-                  if (fullContent.trim()) {
-                    const { error: assistantMsgError } = await supabase
-                      .from("messages")
-                      .insert({
-                        conversation_id: convId,
-                        role: "assistant",
-                        content: fullContent,
-                        tool_calls: toolCalls,
-                      });
+              streaming: false, // Disable LLM streaming for simplicity
+            });
 
-                    if (assistantMsgError) {
-                      console.error("Error saving assistant message with tool_calls:", assistantMsgError);
-                    }
-                  }
+            fullContent = result.content;
 
-                  const toolMessages: AIMessage[] = [];
-                  
-                  for (const toolCall of toolCalls) {
-                    try {
-                      const toolResult = await executeTool(toolCall, userId);
-                      
-                      // Save tool response message
-                      const { error: toolMsgError } = await supabase
-                        .from("messages")
-                        .insert({
-                          conversation_id: convId,
-                          role: "tool",
-                          content: JSON.stringify(toolResult.result),
-                          tool_call_id: toolCall.id,
-                        });
+            // Check if tools were used
+            if (result.intermediateSteps && result.intermediateSteps.length > 0) {
+              toolsUsed = true;
 
-                      if (toolMsgError) {
-                        console.error("Error saving tool message:", toolMsgError);
-                      }
-                      
-                      toolMessages.push({
-                        role: "assistant",
-                        content: fullContent || "",
-                        tool_calls: [toolCall],
-                      });
-                      
-                      toolMessages.push({
-                        role: "tool",
-                        content: JSON.stringify(toolResult.result),
-                        tool_call_id: toolCall.id,
-                      });
-                    } catch (error) {
-                      console.error("Tool execution error:", error);
-                      // Save error tool response
-                      const { error: toolMsgError } = await supabase
-                        .from("messages")
-                        .insert({
-                          conversation_id: convId,
-                          role: "tool",
-                          content: JSON.stringify({
-                            error: error instanceof Error ? error.message : "Unknown error",
-                          }),
-                          tool_call_id: toolCall.id,
-                        });
-
-                      if (toolMsgError) {
-                        console.error("Error saving tool error message:", toolMsgError);
-                      }
-
-                      toolMessages.push({
-                        role: "assistant",
-                        content: fullContent || "",
-                        tool_calls: [toolCall],
-                      });
-                      
-                      toolMessages.push({
-                        role: "tool",
-                        content: JSON.stringify({
-                          error: error instanceof Error ? error.message : "Unknown error",
-                        }),
-                        tool_call_id: toolCall.id,
-                      });
-                    }
-                  }
-
-                  // Get AI response with tool results
-                  let toolResponseContent = "";
-                  
-                  // Don't send placeholder text - frontend will handle loading state
-                  
-                  let toolStreamCompleted = false;
-                  for await (const toolChunk of aiServiceManager.chatStream(
-                    [...aiMessages, ...toolMessages],
-                    {
-                      systemPrompt: SYSTEM_PROMPT,
-                      temperature: 0.7,
-                      maxTokens: 2000,
-                      tools: aiTools,
-                    }
-                  )) {
-                    if (toolChunk.type === "token" && toolChunk.content) {
-                      toolResponseContent += toolChunk.content;
-                      await sendSSEChunk(controller, {
-                        type: "token",
-                        content: toolChunk.content,
-                      });
-                    } else if (toolChunk.type === "error") {
-                      await sendSSEChunk(controller, {
-                        type: "error",
-                        error: toolChunk.error,
-                      });
-                      controller.close();
-                      return;
-                    } else if (toolChunk.type === "done") {
-                      // Tool response stream is complete
-                      toolStreamCompleted = true;
-                      break;
-                    }
-                  }
-
-                  // If stream ended without "done" event, we still use the content we got
-                  if (!toolStreamCompleted && toolResponseContent.trim()) {
-                    console.log("Tool response stream completed naturally");
-                  }
-
-                  // Provide fallback if no content was received
-                  if (!toolResponseContent.trim()) {
-                    console.warn("Tool response stream returned empty content. Providing summary of tool results.");
-                    // Generate a simple summary from tool results
-                    const toolResultsSummary = "I've retrieved the information from the database. Here's what I found:\n\n" +
-                      toolMessages
-                        .filter(m => m.role === "tool")
-                        .map(m => {
-                          try {
-                            const result = JSON.parse(m.content);
-                            if (Array.isArray(result)) {
-                              return `Found ${result.length} results.`;
-                            } else if (result.error) {
-                              return `Error: ${result.error}`;
-                            } else {
-                              return "Retrieved data successfully.";
-                            }
-                          } catch {
-                            return "Retrieved data successfully.";
-                          }
-                        })
-                        .join("\n");
-
-                    toolResponseContent = toolResultsSummary;
-
-                    // Send the fallback content as tokens
-                    await sendSSEChunk(controller, {
-                      type: "token",
-                      content: toolResultsSummary,
-                    });
-                  }
-
-                  // Save final response after tool processing
-                  fullContent = toolResponseContent;
-                  
-                  if (fullContent.trim()) {
-                    const { error: aiMsgError } = await supabase
-                      .from("messages")
-                      .insert({
-                        conversation_id: convId,
-                        role: "assistant",
-                        content: fullContent,
-                        tool_calls: null,
-                        metadata: {
-                          model: "ai-service",
-                          usage: { tokens: 0 },
-                        },
-                      });
-
-                    if (aiMsgError) {
-                      console.error("Error saving final AI message (streaming):", aiMsgError);
-                    }
-                  }
-                } else {
-                  // No tool calls - save the regular response
-                  if (fullContent.trim()) {
-                    const { error: aiMsgError } = await supabase
-                      .from("messages")
-                      .insert({
-                        conversation_id: convId,
-                        role: "assistant",
-                        content: fullContent,
-                        tool_calls: null,
-                        metadata: {
-                          model: "ai-service",
-                          usage: { tokens: 0 },
-                        },
-                      });
-
-                    if (aiMsgError) {
-                      console.error("Error saving AI message (streaming):", aiMsgError);
-                    }
-                  }
-                }
-
-                // Update conversation timestamp
-                await supabase
-                  .from("conversations")
-                  .update({ updated_at: new Date().toISOString() })
-                  .eq("id", convId);
-
-                await sendSSEChunk(controller, {
-                  type: "done",
-                  conversationId: convId,
-                });
-                controller.close();
-                return;
-              }
+              // Send tool call notification
+              await sendSSEChunk(controller, {
+                type: "tool_call",
+                toolCall: {
+                  name: "tools",
+                  id: "langchain-tools",
+                },
+              });
             }
+
+            // Stream the content word by word for better UX
+            const words = fullContent.split(" ");
+            for (const word of words) {
+              await sendSSEChunk(controller, {
+                type: "token",
+                content: word + " ",
+              });
+              // Small delay for smoother streaming
+              await new Promise((resolve) => setTimeout(resolve, 20));
+            }
+
+            // Save assistant response
+            const { error: aiMsgError } = await supabase
+              .from("messages")
+              .insert({
+                conversation_id: convId,
+                role: "assistant",
+                content: fullContent,
+                metadata: {
+                  model: "langchain-agent",
+                  toolsUsed,
+                  intermediateSteps: result.intermediateSteps?.length || 0,
+                },
+              });
+
+            if (aiMsgError) {
+              console.error("Error saving AI message:", aiMsgError);
+            }
+
+            // Update conversation timestamp
+            await supabase
+              .from("conversations")
+              .update({ updated_at: new Date().toISOString() })
+              .eq("id", convId);
+
+            await sendSSEChunk(controller, {
+              type: "done",
+              conversationId: convId,
+            });
+
+            controller.close();
           } catch (error) {
-            console.error("Streaming error:", error);
+            console.error("LangChain agent error:", error);
             await sendSSEChunk(controller, {
               type: "error",
               error: error instanceof Error ? error.message : "Unknown error",
@@ -441,7 +173,7 @@ export async function POST(request: NextRequest) {
         },
       });
 
-      return new Response(stream, {
+      return new Response(responseStream, {
         headers: {
           "Content-Type": "text/event-stream",
           "Cache-Control": "no-cache",
@@ -449,119 +181,27 @@ export async function POST(request: NextRequest) {
         },
       });
     } else {
-      // Non-streaming response (for backward compatibility)
-      const aiResponse = await aiServiceManager.chat(aiMessages, {
-        systemPrompt: SYSTEM_PROMPT,
+      // Non-streaming response
+      console.log("Running LangChain agent (non-streaming)...");
+
+      const result = await runLangChainAgent(messages, {
         temperature: 0.7,
         maxTokens: 2000,
-        tools: aiTools,
       });
 
-      let finalContent = aiResponse.content;
-      const toolMessages: AIMessage[] = [];
+      const finalContent = result.content;
 
-      // Handle tool calls
-      if (aiResponse.toolCalls && aiResponse.toolCalls.length > 0) {
-        // Save assistant message with tool_calls first
-        const { error: assistantMsgError } = await supabase
-          .from("messages")
-          .insert({
-            conversation_id: convId,
-            role: "assistant",
-            content: aiResponse.content || "",
-            tool_calls: aiResponse.toolCalls,
-          });
-
-        if (assistantMsgError) {
-          console.error("Error saving assistant message with tool_calls:", assistantMsgError);
-        }
-
-        for (const toolCall of aiResponse.toolCalls) {
-          try {
-            const toolResult = await executeTool(toolCall, userId);
-            
-            // Save tool response message
-            const { error: toolMsgError } = await supabase
-              .from("messages")
-              .insert({
-                conversation_id: convId,
-                role: "tool",
-                content: JSON.stringify(toolResult.result),
-                tool_call_id: toolCall.id,
-              });
-
-            if (toolMsgError) {
-              console.error("Error saving tool message:", toolMsgError);
-            }
-
-            toolMessages.push({
-              role: "assistant",
-              content: aiResponse.content || "",
-              tool_calls: [toolCall],
-            });
-            
-            toolMessages.push({
-              role: "tool",
-              content: JSON.stringify(toolResult.result),
-              tool_call_id: toolCall.id,
-            });
-          } catch (error) {
-            // Save error tool response
-            const { error: toolMsgError } = await supabase
-              .from("messages")
-              .insert({
-                conversation_id: convId,
-                role: "tool",
-                content: JSON.stringify({
-                  error: error instanceof Error ? error.message : "Unknown error",
-                }),
-                tool_call_id: toolCall.id,
-              });
-
-            if (toolMsgError) {
-              console.error("Error saving tool error message:", toolMsgError);
-            }
-
-            toolMessages.push({
-              role: "assistant",
-              content: aiResponse.content || "",
-              tool_calls: [toolCall],
-            });
-            
-            toolMessages.push({
-              role: "tool",
-              content: JSON.stringify({
-                error: error instanceof Error ? error.message : "Unknown error",
-              }),
-              tool_call_id: toolCall.id,
-            });
-          }
-        }
-
-        // Get final response with tool results
-        const finalResponse = await aiServiceManager.chat(
-          [...aiMessages, ...toolMessages],
-          {
-            systemPrompt: SYSTEM_PROMPT,
-            temperature: 0.7,
-            maxTokens: 2000,
-            tools: aiTools,
-          }
-        );
-        finalContent = finalResponse.content;
-      }
-
-      // Save final AI response
+      // Save assistant response
       const { error: aiMsgError } = await supabase
         .from("messages")
         .insert({
           conversation_id: convId,
           role: "assistant",
           content: finalContent,
-          tool_calls: null,
           metadata: {
-            model: aiResponse.model,
-            usage: aiResponse.usage,
+            model: "langchain-agent",
+            toolsUsed: result.intermediateSteps && result.intermediateSteps.length > 0,
+            intermediateSteps: result.intermediateSteps?.length || 0,
           },
         });
 
@@ -584,7 +224,7 @@ export async function POST(request: NextRequest) {
         data: {
           conversationId: convId,
           message: finalContent,
-          model: aiResponse.model,
+          model: "langchain-agent",
         },
       });
     }
@@ -596,9 +236,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const errorMessage = error instanceof Error ? error.message : "Failed to process chat message";
+    console.error("Chat route error:", error);
+    const errorMessage =
+      error instanceof Error ? error.message : "Failed to process chat message";
     return NextResponse.json({ error: errorMessage }, { status: 500 });
   }
 }
-
-
