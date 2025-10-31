@@ -16,6 +16,7 @@ import {
 import { ChatMessage } from "@/components/chatbot/chat-message";
 import { SuggestionChips } from "@/components/chatbot/suggestion-chips";
 import { ChatHistory } from "@/components/chatbot/chat-history";
+import { ToolExecutionList } from "@/components/chatbot/tool-execution-status";
 import { AIConfirmationDialog } from "@/components/ai/ai-confirmation-dialog";
 import { apiClient, type Message as APIMessage } from "@/lib/api/client";
 import type { AIAction } from "@/lib/contexts/ai-context";
@@ -70,6 +71,9 @@ function ChatbotContent() {
   const [input, setInput] = useState("");
   const [isTyping, setIsTyping] = useState(false);
   const [isUsingTools, setIsUsingTools] = useState(false);
+  const [activeToolExecutions, setActiveToolExecutions] = useState<
+    Array<{ name: string; status: "executing" | "completed" | "failed" }>
+  >([]);
   const [selectedConversation, setSelectedConversation] = useState<string | null>(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [pendingAction, setPendingAction] = useState<AIAction | null>(null);
@@ -193,6 +197,14 @@ function ChatbotContent() {
                   const data = JSON.parse(line.slice(6));
 
                   if (data.type === "token" && data.content) {
+                    // Mark all executing tools as completed when content starts arriving
+                    setActiveToolExecutions((prev) =>
+                      prev.map((tool) =>
+                        tool.status === "executing"
+                          ? { ...tool, status: "completed" }
+                          : tool
+                      )
+                    );
                     setIsUsingTools(false); // Clear tool state when content arrives
                     setMessages((prev) =>
                       prev.map((msg) =>
@@ -202,8 +214,15 @@ function ChatbotContent() {
                       )
                     );
                   } else if (data.type === "tool_call") {
-                    // Tool call detected - show loading animation
+                    // Tool call detected - track execution
                     console.log("Tool call:", data.toolCall);
+                    const toolName = data.toolCall?.name || data.toolCall?.function?.name || "unknown";
+                    setActiveToolExecutions((prev) => {
+                      // Check if tool already exists
+                      const exists = prev.some((t) => t.name === toolName && t.status === "executing");
+                      if (exists) return prev;
+                      return [...prev, { name: toolName, status: "executing" }];
+                    });
                     setIsUsingTools(true);
                     setIsTyping(true);
                   } else if (data.type === "insight" && data.insight) {
@@ -225,6 +244,10 @@ function ChatbotContent() {
                     conversationId = data.conversationId || null;
                     setIsTyping(false);
                     setIsUsingTools(false);
+                    // Clear tool executions after a delay to let user see completion
+                    setTimeout(() => {
+                      setActiveToolExecutions([]);
+                    }, 2000);
 
                     // Clean up any placeholder text and check for pending actions
                     setMessages((prev) =>
@@ -419,6 +442,10 @@ function ChatbotContent() {
                       />
                     ))}
                   </>
+                )}
+                {/* Tool Execution Status */}
+                {activeToolExecutions.length > 0 && (
+                  <ToolExecutionList tools={activeToolExecutions} />
                 )}
                 {isTyping && (
                   <div className="flex items-center gap-3 text-text-tertiary animate-fade-in transition-all duration-300 ease-in-out">
