@@ -102,13 +102,14 @@ Agent: "I found 3 students with concerning deadlines..." [streaming]
 - [ ] Show tool execution feedback
 - [ ] Make chatbot default way to interact with agent
 
-### Phase 3: Embedded Insights 📊
+### Phase 3: Embedded Insights 📊 ✅ COMPLETE
 - [x] Create InsightCard component
 - [x] Create InsightsPanel component
 - [x] Add insight dismiss/complete actions
-- [ ] Add to homepage dashboard
-- [ ] Add to students page
-- [ ] Add to tasks page
+- [x] Add to students page (with category="student" filter)
+- [x] Add to tasks page (with category="deadline" filter)
+- [x] Auto-refresh every 30 seconds
+- Note: Homepage redirects to chatbot, so insights embedded in key pages instead
 
 ### Phase 4: Scheduled Automation ⏰
 - [ ] Configure Vercel Cron job
