@@ -154,10 +154,28 @@ export async function runLangGraphAgent(
     } catch (invokeError: any) {
       // Handle tool validation errors from Azure OpenAI
       if (invokeError?.message?.includes("tool_call_id") || invokeError?.lc_error_code === "INVALID_TOOL_RESULTS") {
-        console.error("[LangGraph Agent] Tool validation error - likely a tool execution failure:", invokeError.message);
-        // Return a graceful error response instead of crashing
+        console.error("[LangGraph Agent] Tool validation error:", {
+          message: invokeError.message,
+          lc_error_code: invokeError?.lc_error_code,
+          pregelTaskId: invokeError?.pregelTaskId,
+          attemptNumber: invokeError?.attemptNumber,
+          stack: invokeError.stack?.split('\n').slice(0, 3).join('\n'),
+        });
+
+        // Try to extract any partial results
+        const partialResponse = invokeError?.metadata?.messages?.find((m: any) => m._getType() === "ai")?.content;
+
+        if (partialResponse && typeof partialResponse === "string") {
+          console.log("[LangGraph Agent] Found partial response before error");
+          return {
+            response: partialResponse,
+            messages: [],
+          };
+        }
+
+        // Return a graceful error response
         return {
-          response: "I encountered an issue while processing your request. Some tools may not be available right now. Please try a simpler query or try again later.",
+          response: "I encountered an issue while processing your request. The database query tools may have had an error. Please try again or try a simpler query.",
           messages: [],
         };
       }

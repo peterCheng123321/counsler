@@ -5,7 +5,7 @@
 
 import { DynamicStructuredTool } from "@langchain/core/tools";
 import { z } from "zod";
-import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 /**
  * Calculate statistics across students or tasks
@@ -49,7 +49,7 @@ export const calculateStatisticsTool = new DynamicStructuredTool({
   }),
   func: async ({ entityType, metric, field, filters }) => {
     try {
-      const supabase = await createClient();
+      const supabase = createAdminClient();
 
       if (entityType === "students") {
         let query = supabase.from("students").select("*");
@@ -223,7 +223,7 @@ export const trendAnalysisTool = new DynamicStructuredTool({
   }),
   func: async ({ entityType, metric, timeRange, groupBy }) => {
     try {
-      const supabase = await createClient();
+      const supabase = createAdminClient();
 
       // Calculate date range
       const now = new Date();
@@ -469,7 +469,7 @@ export const deadlineMonitorTool = new DynamicStructuredTool({
   }),
   func: async ({ daysAhead, priority }) => {
     try {
-      const supabase = await createClient();
+      const supabase = createAdminClient();
 
       // Calculate date range
       const now = new Date();
