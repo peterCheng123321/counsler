@@ -31,6 +31,13 @@ export async function GET(request: NextRequest) {
         agent_runs (
           run_type,
           started_at
+        ),
+        students (
+          id,
+          first_name,
+          last_name,
+          email,
+          graduation_year
         )
       `)
       .eq("counselor_id", counselorId)
@@ -56,10 +63,37 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    // Fetch student data for insights with student IDs
+    const enrichedInsights = await Promise.all(
+      (insights || []).map(async (insight: any) => {
+        // Check if this insight has related student IDs
+        const studentIds = insight.related_data?.student_ids || [];
+
+        // Also check if related_entity_id is a student ID (when related_entity_type is 'student')
+        if (insight.related_entity_type === 'student' && insight.related_entity_id) {
+          studentIds.push(insight.related_entity_id);
+        }
+
+        if (studentIds.length > 0) {
+          const { data: students } = await supabase
+            .from("students")
+            .select("id, first_name, last_name, email, graduation_year, application_progress")
+            .in("id", studentIds.slice(0, 10)); // Limit to 10 students for performance
+
+          return {
+            ...insight,
+            students: students || [],
+          };
+        }
+
+        return insight;
+      })
+    );
+
     return NextResponse.json({
       success: true,
-      insights,
-      count: insights?.length || 0,
+      insights: enrichedInsights,
+      count: enrichedInsights?.length || 0,
     });
   } catch (error) {
     console.error("[Agent Insights API] GET error:", error);

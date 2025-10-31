@@ -45,8 +45,9 @@ export function QuickAIButton({
 
       const result = await response.json();
 
-      if (result.success) {
-        onSelect?.(prompt, result.response);
+      if (result.success && result.data) {
+        const aiResponse = result.data.message || result.data.response || "AI response received";
+        onSelect?.(prompt, aiResponse);
         toast.success("AI response generated");
       } else {
         toast.error(result.error || "Failed to get AI response");

@@ -37,6 +37,15 @@ interface Insight {
     task_ids?: string[];
     deadline_date?: string;
   };
+  // Enriched student data
+  students?: Array<{
+    id: string;
+    first_name: string;
+    last_name: string;
+    email: string;
+    graduation_year?: number;
+    application_progress?: number;
+  }>;
 }
 
 interface InsightCardProps {
@@ -238,19 +247,52 @@ export function InsightCard({ insight, onDismiss, onAct }: InsightCardProps) {
                     </p>
                   </div>
 
+                  {/* Related Students - Show names when available */}
+                  {insight.students && insight.students.length > 0 && (
+                    <div className="bg-surface/50 border border-border rounded-lg p-3">
+                      <div className="flex items-center gap-2 mb-2">
+                        <Users className="h-4 w-4 text-primary" />
+                        <p className="text-xs font-semibold text-text-primary uppercase tracking-wide">
+                          Related Students ({insight.students.length})
+                        </p>
+                      </div>
+                      <div className="space-y-2">
+                        {insight.students.slice(0, 5).map((student) => (
+                          <button
+                            key={student.id}
+                            onClick={() => router.push(`/students/${student.id}`)}
+                            className="w-full text-left px-2 py-1.5 rounded hover:bg-surface transition-colors flex items-center justify-between group"
+                          >
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium text-text-primary truncate">
+                                {student.first_name} {student.last_name}
+                              </p>
+                              {student.graduation_year && (
+                                <p className="text-xs text-text-tertiary">
+                                  Class of {student.graduation_year}
+                                </p>
+                              )}
+                            </div>
+                            {student.application_progress !== undefined && (
+                              <Badge variant="secondary" className="text-xs ml-2 shrink-0">
+                                {student.application_progress}%
+                              </Badge>
+                            )}
+                            <ExternalLink className="h-3 w-3 text-text-tertiary ml-2 opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
+                          </button>
+                        ))}
+                        {insight.students.length > 5 && (
+                          <p className="text-xs text-text-tertiary pl-2">
+                            +{insight.students.length - 5} more students
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
                   {/* Related Data */}
                   {insight.related_data && (
                     <div className="space-y-2">
-                      {insight.related_data.student_ids &&
-                        insight.related_data.student_ids.length > 0 && (
-                          <div className="flex items-center gap-2 text-xs text-text-tertiary">
-                            <Users className="h-3 w-3" />
-                            <span>
-                              {insight.related_data.student_ids.length} students
-                              affected
-                            </span>
-                          </div>
-                        )}
                       {insight.related_data.task_ids &&
                         insight.related_data.task_ids.length > 0 && (
                           <div className="flex items-center gap-2 text-xs text-text-tertiary">
