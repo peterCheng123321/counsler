@@ -103,6 +103,7 @@ export function createLangGraphAgent(usePersistent: boolean = true) {
     checkpointer = new MemorySaver();
   }
 
+  // Configure agent with error handling
   return createReactAgent({
     llm,
     tools: allTools,
@@ -136,24 +137,55 @@ export async function runLangGraphAgent(
     ];
 
     // Invoke the agent with config
-    const result = await agent.invoke(
-      {
-        messages,
-      },
-      {
-        configurable: {
-          thread_id: threadId,
+    // The agent will automatically handle tool calls and return results
+    let result;
+    try {
+      result = await agent.invoke(
+        {
+          messages,
         },
+        {
+          configurable: {
+            thread_id: threadId,
+          },
+          recursionLimit: 15, // Reduced from 25 to prevent long tool chains
+        }
+      );
+    } catch (invokeError: any) {
+      // Handle tool validation errors from Azure OpenAI
+      if (invokeError?.message?.includes("tool_call_id") || invokeError?.lc_error_code === "INVALID_TOOL_RESULTS") {
+        console.error("[LangGraph Agent] Tool validation error - likely a tool execution failure:", invokeError.message);
+        // Return a graceful error response instead of crashing
+        return {
+          response: "I encountered an issue while processing your request. Some tools may not be available right now. Please try a simpler query or try again later.",
+          messages: [],
+        };
       }
-    );
+      // Re-throw other errors
+      throw invokeError;
+    }
 
     // Extract the response from messages
-    const lastMessage = result.messages[result.messages.length - 1];
-    const response = typeof lastMessage.content === "string"
-      ? lastMessage.content
-      : JSON.stringify(lastMessage.content);
+    // Find the last non-tool message (should be AI message with final response)
+    let response = "";
+    let lastAIMessage: any = null;
+    
+    for (let i = result.messages.length - 1; i >= 0; i--) {
+      const msg = result.messages[i];
+      if (msg._getType() === "ai") {
+        lastAIMessage = msg;
+        response = typeof msg.content === "string"
+          ? msg.content
+          : JSON.stringify(msg.content);
+        break;
+      }
+    }
 
-    console.log("[LangGraph Agent] Agent run complete");
+    if (!response) {
+      response = "Agent completed but no response generated";
+    }
+
+    console.log("[LangGraph Agent] Agent run complete, response length:", response.length);
 
     // Extract tool results if any
     const toolResults: ToolResult[] = [];
@@ -169,10 +201,12 @@ export async function runLangGraphAgent(
       }
     }
 
+    console.log("[LangGraph Agent] Tool results found:", toolResults.length);
+
     // Try to extract insights from tool results
     let insights: Insight[] | undefined;
     const analyticsToolUsed = toolResults.some((r) =>
-      ["calculate_statistics", "trend_analysis", "deadline_monitor"].includes(r.toolName)
+      ["calculate_statistics", "trend_analysis", "deadline_monitor", "generate_insights"].includes(r.toolName)
     );
 
     if (analyticsToolUsed) {
@@ -181,6 +215,9 @@ export async function runLangGraphAgent(
         const insightsMatch = response.match(/insights?:\s*(\[[\s\S]*?\])/i);
         if (insightsMatch) {
           insights = JSON.parse(insightsMatch[1]);
+          if (insights && Array.isArray(insights)) {
+            console.log("[LangGraph Agent] Extracted insights:", insights.length);
+          }
         }
       } catch (error) {
         console.error("[LangGraph Agent] Failed to parse insights:", error);
@@ -195,7 +232,11 @@ export async function runLangGraphAgent(
     };
   } catch (error) {
     console.error("[LangGraph Agent] Error running agent:", error);
-    throw error;
+    // Don't re-throw, return error response instead
+    return {
+      response: `Agent error: ${error instanceof Error ? error.message : "Unknown error"}`,
+      messages: [],
+    };
   }
 }
 
