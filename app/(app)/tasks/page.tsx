@@ -88,14 +88,14 @@ export default function TasksPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-heading-1 font-bold text-text-primary">Tasks</h1>
           <p className="text-body text-text-secondary mt-1">
             Manage your tasks and track deadlines
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <QuickAIButton
             suggestions={[
               {
@@ -146,7 +146,7 @@ export default function TasksPage() {
 
       {/* Statistics Cards */}
       {!isLoading && !error && tasks.length > 0 && (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-4">
           <StatsCard
             title="Total Tasks"
             value={stats.total}
@@ -180,7 +180,7 @@ export default function TasksPage() {
 
       {/* Charts */}
       {!isLoading && !error && tasks.length > 0 && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-4">
           <div className="rounded-xl border border-border bg-surface p-6 shadow-sm">
             <TimelineChart
               data={stats.timelineData}
@@ -196,8 +196,7 @@ export default function TasksPage() {
                 dueDate: t.due_date!,
                 priority: (t.priority as "high" | "medium" | "low") || "medium",
                 status: t.status,
-                studentName: t.student_name,
-                category: t.category || undefined,
+                studentName: t.students ? `${t.students.first_name} ${t.students.last_name}` : undefined,
               }))
               .sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime())
               .slice(0, 10)}

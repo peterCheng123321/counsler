@@ -223,7 +223,7 @@ export default function AgentDashboardPage() {
           <CardContent className="space-y-4">
             <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
               <p className="text-sm text-amber-900">
-                The agent system requires database tables that don't exist yet. This is a one-time setup.
+                The agent system requires database tables that don&apos;t exist yet. This is a one-time setup.
               </p>
             </div>
 
@@ -243,7 +243,7 @@ export default function AgentDashboardPage() {
                 </li>
                 <li>Go to <strong>SQL Editor</strong> → <strong>New Query</strong></li>
                 <li>Copy and run the SQL from <code className="bg-surface px-1 py-0.5 rounded">FIX_AGENT_DASHBOARD.md</code></li>
-                <li>Go to <strong>Settings</strong> → <strong>API</strong> → Click <strong>"Reload schema"</strong></li>
+                <li>Go to <strong>Settings</strong> → <strong>API</strong> → Click <strong>&quot;Reload schema&quot;</strong></li>
                 <li>Wait 30 seconds, then refresh this page</li>
               </ol>
             </div>

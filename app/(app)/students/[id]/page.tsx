@@ -457,7 +457,7 @@ Now, I lead a quilting club at school where we create quilts for children in hos
                   <CardContent className="pt-6">
                     <div className="flex flex-col items-center text-center space-y-3">
                       <div className={`rounded-full p-3 ${student.profile_picture_url ? 'bg-green-100' : 'bg-gray-100'}`}>
-                        <Image className={`h-6 w-6 ${student.profile_picture_url ? 'text-green-600' : 'text-gray-400'}`} />
+                        <Image className={`h-6 w-6 ${student.profile_picture_url ? 'text-green-600' : 'text-gray-400'}`} aria-label="Profile picture icon" />
                       </div>
                       <div>
                         <p className="text-sm font-medium text-text-primary mb-1">Profile Picture</p>

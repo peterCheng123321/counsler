@@ -86,7 +86,7 @@ export default function StudentsPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-heading-1 font-bold text-text-primary">
             Students
@@ -95,7 +95,7 @@ export default function StudentsPage() {
             Manage your students and track their application progress
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <QuickAIButton
             suggestions={[
               {

@@ -1,5 +1,6 @@
 "use client";
 
+import { useMemo } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Calendar, Clock, AlertTriangle } from "lucide-react";
@@ -39,20 +40,25 @@ export function DeadlineCalendar({
   description = "Next 7 days",
   daysAhead = 7,
 }: DeadlineCalendarProps) {
-  // Group deadlines by date
-  const groupedDeadlines = deadlines.reduce((acc, deadline) => {
-    const date = new Date(deadline.dueDate).toLocaleDateString();
-    if (!acc[date]) {
-      acc[date] = [];
-    }
-    acc[date].push(deadline);
-    return acc;
-  }, {} as Record<string, DeadlineItem[]>);
+  // Memoize grouped and sorted deadlines for performance
+  const { groupedDeadlines, sortedDates } = useMemo(() => {
+    // Group deadlines by date
+    const grouped = deadlines.reduce((acc, deadline) => {
+      const date = new Date(deadline.dueDate).toLocaleDateString();
+      if (!acc[date]) {
+        acc[date] = [];
+      }
+      acc[date].push(deadline);
+      return acc;
+    }, {} as Record<string, DeadlineItem[]>);
 
-  // Sort dates
-  const sortedDates = Object.keys(groupedDeadlines).sort((a, b) => {
-    return new Date(a).getTime() - new Date(b).getTime();
-  });
+    // Sort dates
+    const sorted = Object.keys(grouped).sort((a, b) => {
+      return new Date(a).getTime() - new Date(b).getTime();
+    });
+
+    return { groupedDeadlines: grouped, sortedDates: sorted };
+  }, [deadlines]);
 
   // Calculate urgency for each deadline
   const getUrgency = (dueDate: string) => {
@@ -91,7 +97,7 @@ export function DeadlineCalendar({
         {description && <CardDescription>{description}</CardDescription>}
       </CardHeader>
       <CardContent>
-        <div className="space-y-6 max-h-[500px] overflow-y-auto">
+        <div className="space-y-4 md:space-y-6 max-h-[400px] md:max-h-[500px] overflow-y-auto">
           {sortedDates.map((date) => {
             const dayDeadlines = groupedDeadlines[date];
             const formattedDate = new Date(date).toLocaleDateString("en-US", {
@@ -118,7 +124,7 @@ export function DeadlineCalendar({
                     return (
                       <div
                         key={deadline.id}
-                        className={`p-3 rounded-lg border-l-4 ${
+                        className={`p-2 md:p-3 rounded-lg border-l-4 ${
                           deadline.priority === "high"
                             ? "border-l-red-500 bg-red-50"
                             : deadline.priority === "medium"
@@ -126,11 +132,11 @@ export function DeadlineCalendar({
                             : "border-l-blue-500 bg-blue-50"
                         }`}
                       >
-                        <div className="flex items-start justify-between gap-2">
-                          <div className="flex-1 space-y-1">
+                        <div className="flex flex-col sm:flex-row items-start sm:justify-between gap-2">
+                          <div className="flex-1 space-y-1 w-full">
                             <div className="flex items-center gap-2">
-                              <PriorityIcon className="h-4 w-4" />
-                              <span className="font-medium text-sm">{deadline.title}</span>
+                              <PriorityIcon className="h-3 w-3 md:h-4 md:w-4" />
+                              <span className="font-medium text-xs md:text-sm">{deadline.title}</span>
                             </div>
                             {deadline.studentName && (
                               <p className="text-xs text-text-secondary">
@@ -143,7 +149,7 @@ export function DeadlineCalendar({
                               </Badge>
                             )}
                           </div>
-                          <div className="flex flex-col items-end gap-1">
+                          <div className="flex sm:flex-col items-center sm:items-end gap-2 sm:gap-1">
                             <span className={`text-xs font-medium ${urgency.color}`}>
                               {urgency.label}
                             </span>

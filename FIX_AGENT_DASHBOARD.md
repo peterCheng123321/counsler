@@ -84,6 +84,99 @@ ON DELETE SET NULL;
 ALTER TABLE agent_config DISABLE ROW LEVEL SECURITY;
 ALTER TABLE agent_runs DISABLE ROW LEVEL SECURITY;
 ALTER TABLE agent_insights DISABLE ROW LEVEL SECURITY;
+
+-- Create agent_checkpoints table for persistent LangGraph memory
+CREATE TABLE IF NOT EXISTS agent_checkpoints (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  thread_id TEXT NOT NULL,
+  checkpoint_id TEXT NOT NULL,
+  parent_checkpoint_id TEXT,
+  checkpoint_data JSONB NOT NULL,
+  metadata JSONB DEFAULT '{}',
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  UNIQUE(thread_id, checkpoint_id)
+);
+
+-- Indexes for faster lookups
+CREATE INDEX IF NOT EXISTS idx_agent_checkpoints_thread ON agent_checkpoints(thread_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_agent_checkpoints_checkpoint_id ON agent_checkpoints(checkpoint_id);
+
+-- Disable RLS for demo mode
+ALTER TABLE agent_checkpoints DISABLE ROW LEVEL SECURITY;
+
+-- Add cleanup function to remove old checkpoints (older than 30 days)
+CREATE OR REPLACE FUNCTION cleanup_old_checkpoints()
+RETURNS void AS $$
+BEGIN
+  DELETE FROM agent_checkpoints
+  WHERE created_at < NOW() - INTERVAL '30 days';
+END;
+$$ LANGUAGE plpgsql;
+
+-- Create workflows tables for automation
+CREATE TABLE IF NOT EXISTS workflows (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  counselor_id UUID NOT NULL,
+  name VARCHAR(255) NOT NULL,
+  description TEXT,
+  trigger_type VARCHAR(50) NOT NULL CHECK (trigger_type IN ('manual', 'scheduled', 'event')),
+  trigger_config JSONB DEFAULT '{}',
+  steps JSONB NOT NULL DEFAULT '[]',
+  enabled BOOLEAN DEFAULT true,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS workflow_runs (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  workflow_id UUID NOT NULL REFERENCES workflows(id) ON DELETE CASCADE,
+  counselor_id UUID NOT NULL,
+  trigger_type VARCHAR(50) NOT NULL,
+  status VARCHAR(20) NOT NULL DEFAULT 'running' CHECK (status IN ('running', 'completed', 'failed', 'cancelled')),
+  current_step INTEGER DEFAULT 0,
+  total_steps INTEGER NOT NULL,
+  step_results JSONB DEFAULT '[]',
+  error_message TEXT,
+  started_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  completed_at TIMESTAMP WITH TIME ZONE,
+  execution_time_ms INTEGER,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS workflow_step_logs (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  workflow_run_id UUID NOT NULL REFERENCES workflow_runs(id) ON DELETE CASCADE,
+  step_index INTEGER NOT NULL,
+  step_name VARCHAR(255) NOT NULL,
+  step_type VARCHAR(50) NOT NULL,
+  status VARCHAR(20) NOT NULL DEFAULT 'running' CHECK (status IN ('running', 'completed', 'failed', 'skipped')),
+  input_data JSONB DEFAULT '{}',
+  output_data JSONB DEFAULT '{}',
+  error_message TEXT,
+  started_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  completed_at TIMESTAMP WITH TIME ZONE,
+  execution_time_ms INTEGER
+);
+
+-- Workflow indexes
+CREATE INDEX IF NOT EXISTS idx_workflows_counselor ON workflows(counselor_id, enabled, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_workflows_trigger ON workflows(trigger_type, enabled);
+CREATE INDEX IF NOT EXISTS idx_workflow_runs_workflow ON workflow_runs(workflow_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_workflow_runs_status ON workflow_runs(status, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_workflow_step_logs_run ON workflow_step_logs(workflow_run_id, step_index);
+
+-- Disable RLS for workflow tables
+ALTER TABLE workflows DISABLE ROW LEVEL SECURITY;
+ALTER TABLE workflow_runs DISABLE ROW LEVEL SECURITY;
+ALTER TABLE workflow_step_logs DISABLE ROW LEVEL SECURITY;
+
+-- Workflow cleanup function
+CREATE OR REPLACE FUNCTION cleanup_old_workflow_runs()
+RETURNS void AS $$
+BEGIN
+  DELETE FROM workflow_runs WHERE created_at < NOW() - INTERVAL '90 days';
+END;
+$$ LANGUAGE plpgsql;
 ```
 
 ### Step 3: Click "Run" Button
@@ -104,13 +197,19 @@ After creating the tables, you MUST reload the schema cache:
 Run this verification query in SQL Editor:
 ```sql
 SELECT table_name FROM information_schema.tables
-WHERE table_schema = 'public' AND table_name LIKE 'agent_%';
+WHERE table_schema = 'public'
+  AND (table_name LIKE 'agent_%' OR table_name LIKE 'workflow%')
+ORDER BY table_name;
 ```
 
-You should see 3 tables:
+You should see 7 tables:
 - agent_config
 - agent_runs
 - agent_insights
+- agent_checkpoints (for persistent memory)
+- workflows (for automation)
+- workflow_runs (execution history)
+- workflow_step_logs (detailed step logs)
 
 ### Step 6: Test the API
 Navigate to http://localhost:3000/agent-dashboard - the page should now load without errors!

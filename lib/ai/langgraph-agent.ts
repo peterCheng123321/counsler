@@ -11,6 +11,7 @@ import { crudTools } from "./langchain-tools-crud";
 import { analyticsTools } from "./analytics-tools";
 import { enhancedTools } from "./enhanced-tools";
 import { MemorySaver } from "@langchain/langgraph";
+import { getPersistentCheckpointSaver } from "./persistent-checkpoint";
 
 /**
  * System prompt for the agent
@@ -76,7 +77,7 @@ export interface ToolResult {
 /**
  * Create the LangGraph agent with all tools
  */
-export function createLangGraphAgent() {
+export function createLangGraphAgent(usePersistent: boolean = true) {
   const llm = createLLM({
     temperature: 0.3, // Lower for more focused analytical responses
     maxTokens: 2000,
@@ -87,8 +88,20 @@ export function createLangGraphAgent() {
 
   console.log(`[LangGraph Agent] Creating agent with ${allTools.length} tools`);
 
-  // Create ReAct agent with memory
-  const checkpointer = new MemorySaver();
+  // Use persistent checkpoint saver for cross-session memory
+  // Falls back to in-memory if persistent fails
+  let checkpointer;
+  if (usePersistent) {
+    try {
+      checkpointer = getPersistentCheckpointSaver();
+      console.log("[LangGraph Agent] Using persistent checkpoint storage");
+    } catch (error) {
+      console.warn("[LangGraph Agent] Failed to initialize persistent storage, using in-memory:", error);
+      checkpointer = new MemorySaver();
+    }
+  } else {
+    checkpointer = new MemorySaver();
+  }
 
   return createReactAgent({
     llm,
