@@ -12,6 +12,7 @@ import { StatsCard } from "@/components/charts/stats-card";
 import { TimelineChart, type TimelineData } from "@/components/charts/timeline-chart";
 import { DeadlineCalendar } from "@/components/charts/deadline-calendar";
 import { QuickAIButton } from "@/components/ai/quick-ai-button";
+import { InsightsPanel } from "@/components/insights/insights-panel";
 import { apiClient, type Task } from "@/lib/api/client";
 import { format, startOfWeek, endOfWeek, eachDayOfInterval, isSameDay } from "date-fns";
 import { toast } from "sonner";
@@ -206,6 +207,14 @@ export default function TasksPage() {
           />
         </div>
       )}
+
+      {/* AI Insights */}
+      <div className="rounded-xl border border-border bg-surface p-6 shadow-sm">
+        <h2 className="text-heading-3 font-semibold text-text-primary mb-4">
+          AI Insights
+        </h2>
+        <InsightsPanel category="deadline" limit={5} />
+      </div>
 
       {/* Filters */}
       <div className="flex items-center gap-4">

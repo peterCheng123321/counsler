@@ -14,6 +14,7 @@ import { StatsCard } from "@/components/charts/stats-card";
 import { ProgressChart, type ProgressData } from "@/components/charts/progress-chart";
 import { StudentDistributionChart } from "@/components/charts/student-distribution-chart";
 import { QuickAIButton } from "@/components/ai/quick-ai-button";
+import { InsightsPanel } from "@/components/insights/insights-panel";
 import { apiClient, type Student } from "@/lib/api/client";
 import { toast } from "sonner";
 
@@ -201,6 +202,14 @@ export default function StudentsPage() {
           />
         </div>
       )}
+
+      {/* AI Insights */}
+      <div className="rounded-xl border border-border bg-surface p-6 shadow-sm">
+        <h2 className="text-heading-3 font-semibold text-text-primary mb-4">
+          AI Insights
+        </h2>
+        <InsightsPanel category="student" limit={5} />
+      </div>
 
       {/* Search and Filters */}
       <div className="flex flex-col sm:flex-row gap-4">

@@ -23,7 +23,7 @@ export function InsightsPanel({ category, limit = 5 }: InsightsPanelProps) {
       const response = await fetch(url);
       if (!response.ok) throw new Error("Failed to fetch insights");
       const result = await response.json();
-      return result.data || [];
+      return result.insights || [];
     },
     refetchInterval: 30000, // Refresh every 30 seconds
   });
