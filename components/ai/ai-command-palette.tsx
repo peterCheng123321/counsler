@@ -316,6 +316,8 @@ export function AICommandPalette({ open, onOpenChange }: AICommandPaletteProps) 
           onKeyDown={handleKeyDown}
           disabled={isProcessing}
           aria-label="AI command input"
+          autoComplete="off"
+          spellCheck="false"
         />
         {isProcessing && <Loader2 className="mr-2 h-4 w-4 animate-spin text-primary" />}
       </div>
@@ -435,7 +437,7 @@ export function AICommandPalette({ open, onOpenChange }: AICommandPaletteProps) 
       </CommandList>
 
       <div className="border-t px-3 py-2 text-xs text-muted-foreground">
-        <span>💡 Tip: Press <kbd className="px-1 py-0.5 mx-1 rounded bg-muted border font-mono text-[10px]">Space</kbd> to open command palette. Try natural language like &quot;show me high priority tasks&quot;</span>
+        <span>💡 Tip: Double-press <kbd className="px-1 py-0.5 mx-1 rounded bg-muted border font-mono text-[10px]">Space</kbd> to open command palette. Try natural language like &quot;show me high priority tasks&quot;</span>
       </div>
     </CommandDialog>
   );
@@ -443,21 +445,35 @@ export function AICommandPalette({ open, onOpenChange }: AICommandPaletteProps) 
 
 /**
  * Hook to enable keyboard shortcut for command palette
+ * Double-press space bar to open
  */
 export function useAICommandPalette() {
   const [open, setOpen] = useState(false);
 
   useEffect(() => {
+    let lastSpacePress = 0;
+    const DOUBLE_PRESS_DELAY = 300; // 300ms window for double press
+
     const down = (e: globalThis.KeyboardEvent) => {
-      // Space bar to open command palette (only if not in an input/textarea)
+      // Double space bar press to open command palette (only if not in an input/textarea)
       const target = e.target as HTMLElement;
       const isInputField = target.tagName === "INPUT" ||
                           target.tagName === "TEXTAREA" ||
                           target.isContentEditable;
 
       if (e.key === " " && !isInputField) {
-        e.preventDefault();
-        setOpen((open) => !open);
+        const now = Date.now();
+        const timeSinceLastPress = now - lastSpacePress;
+
+        if (timeSinceLastPress < DOUBLE_PRESS_DELAY) {
+          // Double press detected
+          e.preventDefault();
+          setOpen((open) => !open);
+          lastSpacePress = 0; // Reset after successful double press
+        } else {
+          // First press
+          lastSpacePress = now;
+        }
       }
     };
 

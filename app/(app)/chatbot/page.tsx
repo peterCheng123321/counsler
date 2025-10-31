@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect, Suspense } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSearchParams } from "next/navigation";
-import { Send, Paperclip, Sparkles, Menu, Brain, Zap } from "lucide-react";
+import { Send, Paperclip, Sparkles, Menu, Brain, Zap, X, Image as ImageIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -87,8 +87,10 @@ function ChatbotContent() {
   const [showConfirmation, setShowConfirmation] = useState(false);
   const [confirmationMessage, setConfirmationMessage] = useState<string>("");
   const [agentMode, setAgentMode] = useState<"langchain" | "langgraph">("langgraph");
+  const [attachedImages, setAttachedImages] = useState<Array<{ url: string; file: File }>>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Pre-fill input from URL query parameter
   useEffect(() => {
@@ -151,18 +153,28 @@ function ChatbotContent() {
       e.preventDefault();
     }
 
-    if (!input.trim()) return;
+    if (!input.trim() && attachedImages.length === 0) return;
+
+    // Prepare message content with image note if images are attached
+    let messageContent = input.trim();
+    if (attachedImages.length > 0) {
+      const imageNote = `[${attachedImages.length} image${attachedImages.length > 1 ? "s" : ""} attached]`;
+      messageContent = messageContent ? `${imageNote}\n\n${messageContent}` : imageNote;
+
+      // Note: Vision capabilities will be enabled via GPT-4 Vision or similar model
+      toast.info("Image processing with AI vision is coming soon! For now, images are attached to your message.");
+    }
 
     const userMessage: Message = {
       id: Date.now().toString(),
       role: "user",
-      content: input,
+      content: messageContent,
       timestamp: new Date(),
     };
 
     setMessages((prev) => [...prev, userMessage]);
-    const messageContent = input;
     setInput("");
+    setAttachedImages([]); // Clear attached images after sending
     setIsTyping(true);
 
     // Create placeholder for streaming message
@@ -423,6 +435,39 @@ function ChatbotContent() {
     setMessages([]);
     setSelectedConversation(null);
     setInput("");
+    setAttachedImages([]);
+  };
+
+  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files) return;
+
+    const newImages: Array<{ url: string; file: File }> = [];
+
+    Array.from(files).forEach((file) => {
+      if (file.type.startsWith("image/")) {
+        const url = URL.createObjectURL(file);
+        newImages.push({ url, file });
+      } else {
+        toast.error("Only image files are supported");
+      }
+    });
+
+    setAttachedImages((prev) => [...prev, ...newImages]);
+
+    // Reset file input
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  };
+
+  const removeImage = (index: number) => {
+    setAttachedImages((prev) => {
+      const newImages = [...prev];
+      URL.revokeObjectURL(newImages[index].url);
+      newImages.splice(index, 1);
+      return newImages;
+    });
   };
 
   return (
@@ -589,18 +634,54 @@ function ChatbotContent() {
               </div>
             )}
 
+            {/* Attached Images Preview */}
+            {attachedImages.length > 0 && (
+              <div className="px-2 flex flex-wrap gap-2 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                {attachedImages.map((img, index) => (
+                  <div
+                    key={index}
+                    className="relative group rounded-lg overflow-hidden border border-border/40 shadow-md hover:shadow-lg transition-all duration-300"
+                  >
+                    <img
+                      src={img.url}
+                      alt={`Attached image ${index + 1}`}
+                      className="h-20 w-20 object-cover"
+                    />
+                    <button
+                      onClick={() => removeImage(index)}
+                      className="absolute top-1 right-1 bg-red-500 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200 hover:bg-red-600"
+                      aria-label="Remove image"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
             {/* Input Box - Modern Floating Style */}
             <div className="group relative">
               <div className="absolute inset-0 bg-gradient-to-r from-primary/20 via-primary/10 to-transparent rounded-2xl opacity-0 group-focus-within:opacity-100 blur-xl transition-all duration-700 ease-out" />
               <div className="relative flex items-end gap-2.5 rounded-2xl border border-border/40 bg-surface/60 backdrop-blur-md p-3 md:p-4 shadow-lg hover:shadow-xl hover:border-border/60 group-focus-within:border-primary/50 group-focus-within:shadow-2xl group-focus-within:shadow-primary/10 transition-all duration-500 ease-out">
+                {/* Hidden File Input */}
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  onChange={handleImageSelect}
+                  className="hidden"
+                />
+
                 {/* Attachment Button */}
                 <Button
                   variant="ghost"
                   size="icon"
-                  onClick={() => toast.info("File attachments coming soon!")}
+                  onClick={() => fileInputRef.current?.click()}
                   className="shrink-0 h-9 w-9 rounded-lg hover:bg-primary/10 text-text-secondary hover:text-primary transition-all duration-500 ease-out hover:scale-110 active:scale-95 hover:rotate-12"
+                  title="Attach images"
                 >
-                  <Paperclip className="h-4 w-4 transition-transform duration-500" />
+                  <ImageIcon className="h-4 w-4 transition-transform duration-500" />
                 </Button>
 
                 {/* Textarea */}
@@ -618,7 +699,7 @@ function ChatbotContent() {
                 {/* Send Button - Modern Design */}
                 <Button
                   onClick={(e) => handleSend(e)}
-                  disabled={!input.trim() || isTyping}
+                  disabled={(!input.trim() && attachedImages.length === 0) || isTyping}
                   size="icon"
                   className="shrink-0 h-9 w-9 rounded-lg bg-gradient-to-br from-primary to-primary-hover hover:shadow-lg hover:scale-110 active:scale-95 transition-all duration-500 ease-out disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:scale-100 text-white shadow-md enabled:hover:shadow-primary/50"
                 >
