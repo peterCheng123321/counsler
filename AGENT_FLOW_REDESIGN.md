@@ -96,11 +96,15 @@ Agent: "I found 3 students with concerning deadlines..." [streaming]
 - [x] Keep dashboard for viewing insights & history
 - [x] Focus on scheduled runs status
 
-### Phase 2: Enhance Chatbot Agent 🚀 PRIORITY
-- [ ] Enable streaming responses in chatbot
-- [ ] Add agent status indicators ("thinking...", "querying database...")
-- [ ] Show tool execution feedback
-- [ ] Make chatbot default way to interact with agent
+### Phase 2: Enhance Chatbot Agent 🚀 ✅ COMPLETE
+- [x] Enable streaming responses in chatbot (already working)
+- [x] Add agent status indicators with tool execution tracking
+- [x] Show tool execution feedback with visual components
+- [x] Created ToolExecutionStatus component with icon-based tool identification
+- [x] Real-time tool tracking (executing → completed states)
+- [x] Color-coded tools by category with smooth animations
+- [x] Auto-cleanup of completed tools after display
+- [x] Chatbot is default interaction method (homepage redirects to chatbot)
 
 ### Phase 3: Embedded Insights 📊 ✅ COMPLETE
 - [x] Create InsightCard component
@@ -190,9 +194,17 @@ LIMIT 5;
 
 ## Files Created
 
+**Phase 1 & 3 - Insights System:**
 - `components/insights/insight-card.tsx` - Individual insight display
 - `components/insights/insights-panel.tsx` - Insight list with actions
 - `app/api/v1/agent/insights/[id]/route.ts` - Update insight status
+
+**Phase 2 - Tool Execution UI:**
+- `components/chatbot/tool-execution-status.tsx` - Visual tool execution tracking
+- `app/api/test/create-insights/route.ts` - Generate sample insights for testing
+- `scripts/create-sample-insights.ts` - Script to create insights (requires env setup)
+
+**Documentation:**
 - `AGENT_FLOW_REDESIGN.md` - This document
 
 ## Recommendation
