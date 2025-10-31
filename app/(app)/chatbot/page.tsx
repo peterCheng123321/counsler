@@ -74,7 +74,12 @@ function ChatbotContent() {
   const [isTyping, setIsTyping] = useState(false);
   const [isUsingTools, setIsUsingTools] = useState(false);
   const [activeToolExecutions, setActiveToolExecutions] = useState<
-    Array<{ name: string; status: "executing" | "completed" | "failed" }>
+    Array<{
+      name: string;
+      status: "executing" | "completed" | "failed";
+      description?: string;
+      arguments?: any;
+    }>
   >([]);
   const [selectedConversation, setSelectedConversation] = useState<string | null>(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -216,14 +221,50 @@ function ChatbotContent() {
                       )
                     );
                   } else if (data.type === "tool_call") {
-                    // Tool call detected - track execution
+                    // Tool call detected - track execution with details
                     console.log("Tool call:", data.toolCall);
                     const toolName = data.toolCall?.name || data.toolCall?.function?.name || "unknown";
+                    const toolArgs = data.toolCall?.args || data.toolCall?.function?.arguments || {};
+
+                    // Create a human-readable description based on tool name and arguments
+                    let description = "";
+                    try {
+                      const args = typeof toolArgs === "string" ? JSON.parse(toolArgs) : toolArgs;
+
+                      // Generate context-aware descriptions
+                      if (toolName === "get_students" && args.filters) {
+                        const filterDesc: string[] = [];
+                        if (args.filters.graduationYear) filterDesc.push(`graduating ${args.filters.graduationYear}`);
+                        if (args.filters.gpa_min) filterDesc.push(`GPA ≥ ${args.filters.gpa_min}`);
+                        if (args.filters.progress_min) filterDesc.push(`progress ≥ ${args.filters.progress_min}%`);
+                        description = filterDesc.length > 0 ? `Finding students ${filterDesc.join(", ")}` : "Fetching all students";
+                      } else if (toolName === "get_tasks" && args.filters) {
+                        const filterDesc: string[] = [];
+                        if (args.filters.status) filterDesc.push(`status: ${args.filters.status}`);
+                        if (args.filters.priority) filterDesc.push(`priority: ${args.filters.priority}`);
+                        description = filterDesc.length > 0 ? `Loading tasks with ${filterDesc.join(", ")}` : "Fetching all tasks";
+                      } else if (toolName === "get_upcoming_deadlines" && args.daysAhead) {
+                        description = `Checking deadlines for next ${args.daysAhead} days`;
+                      } else if (toolName === "calculate_statistics" && args.metric) {
+                        description = `Calculating ${args.metric} statistics`;
+                      }
+                    } catch (e) {
+                      console.error("Error parsing tool arguments:", e);
+                    }
+
                     setActiveToolExecutions((prev) => {
                       // Check if tool already exists
                       const exists = prev.some((t) => t.name === toolName && t.status === "executing");
                       if (exists) return prev;
-                      return [...prev, { name: toolName, status: "executing" }];
+                      return [
+                        ...prev,
+                        {
+                          name: toolName,
+                          status: "executing",
+                          description,
+                          arguments: toolArgs,
+                        },
+                      ];
                     });
                     setIsUsingTools(true);
                     setIsTyping(true);
@@ -514,21 +555,27 @@ function ChatbotContent() {
                 value={agentMode}
                 onValueChange={(value) => setAgentMode(value as "langchain" | "langgraph")}
               >
-                <SelectTrigger className="w-40 h-8 text-sm">
+                <SelectTrigger className="w-48 h-8 text-sm">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="langgraph">
-                    <div className="flex items-center gap-2">
-                      <Zap className="h-3 w-3" />
-                      <span>Advanced</span>
-                      <Badge variant="outline" className="text-xs ml-1">Recommended</Badge>
+                    <div className="flex flex-col gap-0.5">
+                      <div className="flex items-center gap-2">
+                        <Zap className="h-3 w-3" />
+                        <span className="font-semibold">Expert</span>
+                        <Badge variant="outline" className="text-xs">Recommended</Badge>
+                      </div>
+                      <span className="text-xs text-muted-foreground ml-5">Better accuracy, may take longer</span>
                     </div>
                   </SelectItem>
                   <SelectItem value="langchain">
-                    <div className="flex items-center gap-2">
-                      <Brain className="h-3 w-3" />
-                      <span>Standard</span>
+                    <div className="flex flex-col gap-0.5">
+                      <div className="flex items-center gap-2">
+                        <Brain className="h-3 w-3" />
+                        <span className="font-semibold">Speed</span>
+                      </div>
+                      <span className="text-xs text-muted-foreground ml-5">Faster responses</span>
                     </div>
                   </SelectItem>
                 </SelectContent>

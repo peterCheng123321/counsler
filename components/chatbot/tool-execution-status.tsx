@@ -8,6 +8,8 @@ interface ToolExecutionStatusProps {
   toolName: string;
   status: "executing" | "completed" | "failed";
   compact?: boolean;
+  description?: string;
+  arguments?: any;
 }
 
 const TOOL_CONFIG: Record<
@@ -81,9 +83,14 @@ export function ToolExecutionStatus({
   toolName,
   status,
   compact = false,
+  description,
+  arguments: args,
 }: ToolExecutionStatusProps) {
   const config = TOOL_CONFIG[toolName] || TOOL_CONFIG.default;
   const Icon = config.icon;
+
+  // Use custom description if available, otherwise use default label
+  const displayLabel = description || config.label;
 
   if (compact) {
     return (
@@ -97,7 +104,7 @@ export function ToolExecutionStatus({
             <Icon className={cn("h-3 w-3", config.color)} />
           )}
         </div>
-        <span className="text-xs">{config.label}</span>
+        <span className="text-xs">{displayLabel}</span>
       </div>
     );
   }
@@ -130,10 +137,14 @@ export function ToolExecutionStatus({
         </div>
         <div className="flex-1 min-w-0">
           <p className="text-sm font-medium text-text-primary">
-            {status === "executing" && config.label}
-            {status === "completed" && `${config.label} - Complete`}
-            {status === "failed" && `${config.label} - Failed`}
+            {status === "executing" && displayLabel}
+            {status === "completed" && `${displayLabel} - Complete`}
+            {status === "failed" && `${displayLabel} - Failed`}
           </p>
+          {/* Show default label as subtitle if custom description exists */}
+          {description && status === "executing" && (
+            <p className="text-xs text-text-tertiary mt-0.5">{config.label}</p>
+          )}
           {status === "executing" && (
             <div className="mt-1.5 h-1 w-full overflow-hidden rounded-full bg-gray-100">
               <div
@@ -159,6 +170,8 @@ interface ToolExecutionListProps {
   tools: Array<{
     name: string;
     status: "executing" | "completed" | "failed";
+    description?: string;
+    arguments?: any;
   }>;
 }
 
@@ -167,8 +180,9 @@ export function ToolExecutionList({ tools }: ToolExecutionListProps) {
 
   return (
     <div className="space-y-2 my-4 animate-fade-in">
-      <p className="text-xs font-semibold text-text-tertiary uppercase tracking-wide mb-2">
-        Agent Tools
+      <p className="text-xs font-semibold text-text-tertiary uppercase tracking-wide mb-2 flex items-center gap-2">
+        <span className="inline-block h-2 w-2 rounded-full bg-primary animate-pulse"></span>
+        Agent Activity
       </p>
       <div className="space-y-2">
         {tools.map((tool, index) => (
@@ -176,6 +190,8 @@ export function ToolExecutionList({ tools }: ToolExecutionListProps) {
             key={`${tool.name}-${index}`}
             toolName={tool.name}
             status={tool.status}
+            description={tool.description}
+            arguments={tool.arguments}
           />
         ))}
       </div>
