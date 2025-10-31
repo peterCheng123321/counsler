@@ -62,8 +62,8 @@ export function StudentCard({ student }: StudentCardProps) {
         let nextDeadline = null as Date | null;
         if (collegesData.data && collegesData.data.length > 0) {
           const deadlines = collegesData.data
-            .filter((c: any) => c.application_deadline)
-            .map((c: any) => new Date(c.application_deadline))
+            .filter((c: any) => c.deadline)
+            .map((c: any) => new Date(c.deadline))
             .sort((a: Date, b: Date) => a.getTime() - b.getTime());
           nextDeadline = deadlines[0] || null;
         }

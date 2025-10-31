@@ -91,6 +91,7 @@ function ChatbotContent() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const isStreamingRef = useRef(false); // Track if actively streaming to prevent query invalidations
 
   // Pre-fill input from URL query parameter
   useEffect(() => {
@@ -105,14 +106,15 @@ function ChatbotContent() {
   }, [searchParams]);
 
   // Load conversation messages when conversation is selected
+  // Don't refetch while actively streaming to prevent interruptions
   const { data: conversationData, isLoading: isLoadingConversation } = useQuery({
     queryKey: ["conversation", selectedConversation],
     queryFn: () => apiClient.getConversation(selectedConversation!),
-    enabled: !!selectedConversation,
+    enabled: !!selectedConversation && !isStreamingRef.current,
     refetchOnMount: false,
     refetchOnWindowFocus: false,
-    staleTime: 2 * 60 * 1000, // 2 minutes - conversation data doesn't change often
-    gcTime: 5 * 60 * 1000, // Keep in cache for 5 minutes
+    staleTime: 5 * 60 * 1000, // 5 minutes - longer stale time to reduce refetches
+    gcTime: 10 * 60 * 1000, // Keep in cache for 10 minutes
   });
 
   // Update messages when conversation data loads
@@ -176,6 +178,7 @@ function ChatbotContent() {
     setInput("");
     setAttachedImages([]); // Clear attached images after sending
     setIsTyping(true);
+    isStreamingRef.current = true; // Mark streaming as active
 
     // Create placeholder for streaming message
     const aiMessageId = (Date.now() + 1).toString();
@@ -299,6 +302,7 @@ function ChatbotContent() {
                     conversationId = data.conversationId || null;
                     setIsTyping(false);
                     setIsUsingTools(false);
+                    isStreamingRef.current = false; // Mark streaming as complete
                     // Clear tool executions after a delay to let user see completion
                     setTimeout(() => {
                       setActiveToolExecutions([]);
@@ -347,7 +351,18 @@ function ChatbotContent() {
                       })
                     );
                   } else if (data.type === "error") {
-                    throw new Error(data.error || "Unknown error");
+                    isStreamingRef.current = false; // Clear streaming flag on error
+                    setIsTyping(false);
+                    setIsUsingTools(false);
+                    // Update message with error
+                    setMessages((prev) =>
+                      prev.map((msg) =>
+                        msg.id === aiMessageId
+                          ? { ...msg, content: `Error: ${data.error || "Unknown error occurred"}` }
+                          : msg
+                      )
+                    );
+                    return; // Exit early instead of throwing
                   }
                 } catch (parseError) {
                   console.error("Error parsing SSE data:", parseError);
@@ -357,27 +372,55 @@ function ChatbotContent() {
           }
         } catch (streamError) {
           console.error("Stream error occurred:", streamError);
-          throw new Error(streamError instanceof Error ? streamError.message : "Stream error occurred");
+          isStreamingRef.current = false; // Clear streaming flag on error
+          setIsTyping(false);
+          setIsUsingTools(false);
+
+          // If we have partial content, keep it and add error message
+          setMessages((prev) =>
+            prev.map((msg) => {
+              if (msg.id === aiMessageId) {
+                const currentContent = msg.content || "";
+                const errorMsg = streamError instanceof Error ? streamError.message : "Stream was interrupted";
+                // Only append error if we don't already have content
+                if (!currentContent.trim()) {
+                  return { ...msg, content: `Error: ${errorMsg}` };
+                }
+                return msg; // Keep partial content if we have it
+              }
+              return msg;
+            })
+          );
+          // Don't throw - handle gracefully
+          return;
         }
 
-        // Update conversation ID if new conversation was created
+        // Update conversation ID and invalidate queries AFTER streaming completes
         if (conversationId && !selectedConversation) {
           setSelectedConversation(conversationId);
-          // Invalidate conversations list when new conversation is created
-          queryClient.invalidateQueries({ queryKey: ["conversations"] });
-          // Also invalidate the new conversation to ensure it's fresh
-          queryClient.invalidateQueries({ queryKey: ["conversation", conversationId] });
+          // Delay invalidation to ensure streaming is fully complete
+          setTimeout(() => {
+            if (!isStreamingRef.current) {
+              queryClient.invalidateQueries({ queryKey: ["conversations"] });
+            }
+          }, 500);
         } else if (selectedConversation) {
-          // Invalidate current conversation after message is sent to ensure sync
-          queryClient.invalidateQueries({ queryKey: ["conversation", selectedConversation] });
+          // Delay invalidation to ensure streaming is fully complete
+          setTimeout(() => {
+            if (!isStreamingRef.current) {
+              queryClient.invalidateQueries({ queryKey: ["conversations"] });
+            }
+          }, 500);
         }
       } else {
         // Fallback to non-streaming
         if (response.success && response.data) {
           if (response.data.conversationId && !selectedConversation) {
             setSelectedConversation(response.data.conversationId);
-            // Only invalidate conversations list when new conversation is created
-            queryClient.invalidateQueries({ queryKey: ["conversations"] });
+            // Delay invalidation to prevent immediate refetch
+            setTimeout(() => {
+              queryClient.invalidateQueries({ queryKey: ["conversations"] });
+            }, 500);
           }
 
           setMessages((prev) =>
@@ -388,9 +431,11 @@ function ChatbotContent() {
             )
           );
 
-          // Invalidate current conversation to ensure database sync
+          // Delay invalidation to prevent immediate refetch
           if (selectedConversation) {
-            queryClient.invalidateQueries({ queryKey: ["conversation", selectedConversation] });
+            setTimeout(() => {
+              queryClient.invalidateQueries({ queryKey: ["conversations"] });
+            }, 500);
           }
         } else {
           throw new Error(response.error || "Failed to get response");
@@ -398,6 +443,7 @@ function ChatbotContent() {
       }
     } catch (error) {
       console.error("Chat error:", error);
+      isStreamingRef.current = false; // Ensure streaming flag is cleared on error
       let errorMessage = "Sorry, I encountered an error. Please try again.";
 
       if (error instanceof Error) {
@@ -417,6 +463,7 @@ function ChatbotContent() {
       );
     } finally {
       setIsTyping(false);
+      isStreamingRef.current = false; // Always clear streaming flag in finally
     }
   };
 
@@ -767,12 +814,12 @@ function ChatbotContent() {
         action={pendingAction}
         message={confirmationMessage}
         onSuccess={() => {
-          // Refresh the conversation to show the updated data
-          if (selectedConversation) {
-            queryClient.invalidateQueries({ queryKey: ["conversation", selectedConversation] });
-          }
-          queryClient.invalidateQueries({ queryKey: ["students"] });
-          queryClient.invalidateQueries({ queryKey: ["tasks"] });
+          // Only invalidate relevant queries, not all at once
+          // Delay to prevent immediate refetch during user interaction
+          setTimeout(() => {
+            queryClient.invalidateQueries({ queryKey: ["students"] });
+            queryClient.invalidateQueries({ queryKey: ["tasks"] });
+          }, 300);
         }}
       />
     </div>

@@ -180,7 +180,23 @@ export async function POST(
       );
     }
 
-    return NextResponse.json({ data, success: true }, { status: 201 });
+    // Fetch college details and merge
+    const { data: collegeDetails } = await supabase
+      .from("colleges")
+      .select("*")
+      .eq("id", collegeId)
+      .single();
+
+    return NextResponse.json(
+      {
+        data: {
+          ...studentCollege,
+          colleges: collegeDetails || null,
+        },
+        success: true,
+      },
+      { status: 201 }
+    );
   } catch (error) {
     if (error instanceof z.ZodError) {
       return NextResponse.json(
