@@ -266,7 +266,7 @@ export async function* streamLangGraphAgent(
   conversationHistory: BaseMessage[] = [],
   threadId: string = "default"
 ): AsyncGenerator<{
-  type: "token" | "tool" | "insight" | "complete";
+  type: "token" | "tool" | "insight" | "complete" | "error";
   content: any;
 }> {
   try {
@@ -281,67 +281,112 @@ export async function* streamLangGraphAgent(
     ];
 
     // Stream the agent
-    const stream = await agent.stream(
-      {
-        messages,
-      },
-      {
-        configurable: {
-          thread_id: threadId,
+    let stream;
+    try {
+      stream = await agent.stream(
+        {
+          messages,
         },
-        streamMode: "values",
-      }
-    );
+        {
+          configurable: {
+            thread_id: threadId,
+          },
+          streamMode: "values",
+          recursionLimit: 15, // Match non-streaming version
+        }
+      );
+    } catch (streamError: any) {
+      // Handle initialization errors (like checkpoint conflicts)
+      console.error("[LangGraph Agent] Error initializing stream:", streamError);
+
+      // Return graceful error
+      yield {
+        type: "error",
+        content: {
+          message: "Unable to start agent. This may be due to a checkpoint conflict. Please try again.",
+          retryable: true,
+        },
+      };
+      return;
+    }
 
     let fullResponse = "";
     const toolResults: ToolResult[] = [];
 
-    for await (const event of stream) {
-      // Stream messages
-      if (event.messages && event.messages.length > 0) {
-        const lastMessage = event.messages[event.messages.length - 1];
+    try {
+      for await (const event of stream) {
+        // Stream messages
+        if (event.messages && event.messages.length > 0) {
+          const lastMessage = event.messages[event.messages.length - 1];
 
-        // Stream AI message content
-        if (lastMessage._getType() === "ai") {
-          const content = typeof lastMessage.content === "string"
-            ? lastMessage.content
-            : JSON.stringify(lastMessage.content);
+          // Stream AI message content
+          if (lastMessage._getType() === "ai") {
+            const content = typeof lastMessage.content === "string"
+              ? lastMessage.content
+              : JSON.stringify(lastMessage.content);
 
-          if (content !== fullResponse) {
-            const newTokens = content.slice(fullResponse.length);
-            fullResponse = content;
-
-            yield {
-              type: "token",
-              content: newTokens,
-            };
-          }
-
-          // Report tool calls
-          if ("tool_calls" in lastMessage && lastMessage.tool_calls && Array.isArray(lastMessage.tool_calls)) {
-            for (const toolCall of lastMessage.tool_calls) {
-              const toolResult: ToolResult = {
-                toolName: toolCall.name || "unknown",
-                result: JSON.stringify(toolCall.args),
-                success: true,
-              };
-              toolResults.push(toolResult);
+            if (content !== fullResponse) {
+              const newTokens = content.slice(fullResponse.length);
+              fullResponse = content;
 
               yield {
-                type: "tool",
-                content: toolResult,
+                type: "token",
+                content: newTokens,
               };
+            }
+
+            // Report tool calls
+            if ("tool_calls" in lastMessage && lastMessage.tool_calls && Array.isArray(lastMessage.tool_calls)) {
+              for (const toolCall of lastMessage.tool_calls) {
+                const toolResult: ToolResult = {
+                  toolName: toolCall.name || "unknown",
+                  result: JSON.stringify(toolCall.args),
+                  success: true,
+                };
+                toolResults.push(toolResult);
+
+                yield {
+                  type: "tool",
+                  content: toolResult,
+                };
+              }
             }
           }
         }
       }
+    } catch (iterationError: any) {
+      // Handle errors during stream iteration
+      console.error("[LangGraph Agent] Error during stream iteration:", iterationError);
+
+      // If we got a partial response, return it
+      if (fullResponse) {
+        console.log("[LangGraph Agent] Returning partial response before error");
+        yield {
+          type: "complete",
+          content: {
+            response: fullResponse,
+            toolResults: toolResults.length > 0 ? toolResults : undefined,
+            partial: true,
+          },
+        };
+      } else {
+        // No response yet, return error
+        yield {
+          type: "error",
+          content: {
+            message: "Agent encountered an error during execution. Please try again.",
+            retryable: true,
+          },
+        };
+      }
+      return;
     }
 
     // Yield completion
     yield {
       type: "complete",
       content: {
-        response: fullResponse,
+        response: fullResponse || "Agent completed but no response generated",
         toolResults: toolResults.length > 0 ? toolResults : undefined,
       },
     };
@@ -349,6 +394,14 @@ export async function* streamLangGraphAgent(
     console.log("[LangGraph Agent] Streaming agent run complete");
   } catch (error) {
     console.error("[LangGraph Agent] Error streaming agent:", error);
-    throw error;
+
+    // Yield error instead of throwing
+    yield {
+      type: "error",
+      content: {
+        message: error instanceof Error ? error.message : "Unknown error occurred",
+        retryable: true,
+      },
+    };
   }
 }

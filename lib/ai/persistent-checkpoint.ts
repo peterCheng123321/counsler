@@ -197,6 +197,7 @@ export class SupabaseCheckpointSaver extends BaseCheckpointSaver {
 
   /**
    * Save a checkpoint to Supabase
+   * Uses UPSERT to handle retries gracefully
    */
   async put(
     config: RunnableConfig,
@@ -215,12 +216,17 @@ export class SupabaseCheckpointSaver extends BaseCheckpointSaver {
 
       const parentCheckpointId = config.configurable?.parent_checkpoint_id;
 
-      const { error } = await this.supabase.from("agent_checkpoints").insert({
+      // Use upsert to handle retries gracefully
+      // This will insert if not exists, or update if already exists (retry scenario)
+      const { error } = await this.supabase.from("agent_checkpoints").upsert({
         thread_id: threadId,
         checkpoint_id: checkpointId,
         parent_checkpoint_id: parentCheckpointId || null,
         checkpoint_data: JSON.stringify(checkpoint),
         metadata: metadata || {},
+        updated_at: new Date().toISOString(), // Update timestamp on retry
+      }, {
+        onConflict: 'thread_id,checkpoint_id', // Specify conflict columns
       });
 
       if (error) {
