@@ -503,27 +503,44 @@ function ChatbotContent() {
                 value={agentMode}
                 onValueChange={(value) => setAgentMode(value as "langchain" | "langgraph")}
               >
-                <SelectTrigger className="w-48 h-8 text-sm">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="langgraph">
-                    <div className="flex flex-col gap-0.5">
+                <SelectTrigger className="w-auto min-w-[140px] h-9 text-sm">
+                  <SelectValue>
+                    {agentMode === "langgraph" ? (
                       <div className="flex items-center gap-2">
                         <Zap className="h-3 w-3" />
-                        <span className="font-semibold">Expert</span>
-                        <Badge variant="outline" className="text-xs">Recommended</Badge>
+                        <span className="font-medium">Expert</span>
+                        <Badge variant="outline" className="text-[10px] px-1 py-0">Recommended</Badge>
                       </div>
-                      <span className="text-xs text-muted-foreground ml-5">Better accuracy, may take longer</span>
-                    </div>
-                  </SelectItem>
-                  <SelectItem value="langchain">
-                    <div className="flex flex-col gap-0.5">
+                    ) : (
                       <div className="flex items-center gap-2">
                         <Brain className="h-3 w-3" />
+                        <span className="font-medium">Speed</span>
+                      </div>
+                    )}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent align="end" className="w-[280px]">
+                  <SelectItem value="langgraph" className="py-3">
+                    <div className="flex flex-col gap-1.5">
+                      <div className="flex items-center gap-2">
+                        <Zap className="h-4 w-4 text-primary" />
+                        <span className="font-semibold">Expert</span>
+                        <Badge variant="outline" className="text-[10px] ml-auto">Recommended</Badge>
+                      </div>
+                      <p className="text-xs text-muted-foreground pl-6">
+                        Better accuracy, may take longer
+                      </p>
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="langchain" className="py-3">
+                    <div className="flex flex-col gap-1.5">
+                      <div className="flex items-center gap-2">
+                        <Brain className="h-4 w-4 text-primary" />
                         <span className="font-semibold">Speed</span>
                       </div>
-                      <span className="text-xs text-muted-foreground ml-5">Faster responses</span>
+                      <p className="text-xs text-muted-foreground pl-6">
+                        Faster responses
+                      </p>
                     </div>
                   </SelectItem>
                 </SelectContent>

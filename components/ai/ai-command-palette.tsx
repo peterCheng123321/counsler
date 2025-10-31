@@ -307,15 +307,15 @@ export function AICommandPalette({ open, onOpenChange }: AICommandPaletteProps) 
       </div>
 
       <div className="flex items-center border-b px-3" aria-describedby="command-description">
-        <Sparkles className="mr-2 h-4 w-4 shrink-0 text-primary" />
+        <Search className="mr-2 h-4 w-4 shrink-0 text-text-tertiary" />
         <input
           className="flex h-11 w-full rounded-md bg-transparent py-3 text-sm outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-50"
-          placeholder="Ask me anything... (e.g., show Sarah's details, filter high priority tasks)"
+          placeholder="Search students, tasks, or ask AI anything..."
           value={inputValue}
           onChange={(e) => setInputValue(e.target.value)}
           onKeyDown={handleKeyDown}
           disabled={isProcessing}
-          aria-label="AI command input"
+          aria-label="Search and AI command input"
           autoComplete="off"
           spellCheck="false"
         />
@@ -369,7 +369,7 @@ export function AICommandPalette({ open, onOpenChange }: AICommandPaletteProps) 
 
         {/* Show context-aware suggestions */}
         {!inputValue && !result && recentCommands.length === 0 && (
-          <CommandGroup heading={`Suggestions for ${getCurrentPage()} page`}>
+          <CommandGroup heading="Try searching for">
             {getContextSuggestions(getCurrentPage()).map((suggestion, index) => (
               <CommandItem
                 key={index}
@@ -379,7 +379,7 @@ export function AICommandPalette({ open, onOpenChange }: AICommandPaletteProps) 
                 }}
                 className="cursor-pointer"
               >
-                <Sparkles className="mr-2 h-4 w-4 text-primary" />
+                <Search className="mr-2 h-4 w-4 text-text-tertiary" />
                 <span>{suggestion}</span>
               </CommandItem>
             ))}
@@ -437,7 +437,7 @@ export function AICommandPalette({ open, onOpenChange }: AICommandPaletteProps) 
       </CommandList>
 
       <div className="border-t px-3 py-2 text-xs text-muted-foreground">
-        <span>💡 Tip: Double-press <kbd className="px-1 py-0.5 mx-1 rounded bg-muted border font-mono text-[10px]">Space</kbd> to open command palette. Try natural language like &quot;show me high priority tasks&quot;</span>
+        <span>💡 Tip: Double-press <kbd className="px-1 py-0.5 mx-1 rounded bg-muted border font-mono text-[10px]">Space</kbd> to search or try natural language like &quot;show me high priority tasks&quot;</span>
       </div>
     </CommandDialog>
   );

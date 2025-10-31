@@ -70,30 +70,21 @@ export function Header({ onCommandPaletteOpen }: HeaderProps = {}) {
 
         {/* Right Side Actions */}
         <div className="flex items-center space-x-3 ml-auto">
-          {/* AI Assistant Button */}
+          {/* Unified Search & AI Assistant */}
           <Button
             variant="outline"
-            className="gap-2 border-primary/20 hover:border-primary hover:bg-primary/5 transition-all duration-300"
+            className="gap-2 border-border/50 hover:border-primary hover:bg-primary/5 transition-all duration-300 w-auto lg:w-80 justify-start"
             onClick={onCommandPaletteOpen}
           >
-            <Sparkles className="h-4 w-4 text-primary" />
-            <span className="hidden md:inline font-medium">AI Assistant</span>
-            <kbd className="hidden lg:inline-flex h-5 select-none items-center gap-1 rounded border bg-muted px-1.5 font-mono text-[10px] font-medium opacity-100">
-              <span className="text-xs">⌘</span>K
-            </kbd>
+            <Search className="h-4 w-4 text-text-tertiary" />
+            <span className="hidden md:inline font-normal text-text-secondary text-sm">Search or ask AI...</span>
+            <div className="hidden lg:flex items-center gap-1 ml-auto">
+              <Sparkles className="h-3 w-3 text-primary" />
+              <kbd className="inline-flex h-5 select-none items-center gap-0.5 rounded border bg-muted px-1.5 font-mono text-[10px] font-medium">
+                Space Space
+              </kbd>
+            </div>
           </Button>
-
-          {/* Search */}
-          <div className="relative hidden lg:block">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-tertiary pointer-events-none" />
-            <Input
-              placeholder="Search students, tasks, colleges..."
-              className="w-64 pl-10 pr-10 bg-background/50 border-border/50 focus:border-primary focus:bg-background transition-all duration-300 text-sm"
-            />
-            <button className="absolute right-3 top-1/2 -translate-y-1/2 text-text-tertiary hover:text-text-primary transition-colors opacity-0 hover:opacity-100" aria-label="Clear search">
-              ✕
-            </button>
-          </div>
 
           {/* Notifications */}
           <DropdownMenu>

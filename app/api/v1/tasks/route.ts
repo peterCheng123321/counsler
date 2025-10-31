@@ -49,7 +49,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Fetch student data for tasks that have student_id
-    const tasks = parsed.tasks;
+    const tasks = parsed.tasks || [];
     const studentIds = tasks
       .map((task: any) => task.student_id)
       .filter((id: any): id is string => id !== null && id !== undefined);
