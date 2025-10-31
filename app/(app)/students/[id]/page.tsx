@@ -48,29 +48,30 @@ export default function StudentDetailPage({
   const [essay, setEssay] = useState<any>(null);
   const [essayLoading, setEssayLoading] = useState(true);
 
-  useEffect(() => {
-    const fetchEssay = async () => {
-      try {
-        setEssayLoading(true);
-        const res = await fetch(`/api/v1/students/${id}/essays`);
-        const data = await res.json();
-        // Get first essay or null
-        if (data.data && data.data.length > 0) {
-          setEssay(data.data[0]);
-        } else {
-          setEssay(null);
-        }
-      } catch (error) {
-        console.error("Failed to fetch essay:", error);
+  const fetchEssay = async () => {
+    try {
+      setEssayLoading(true);
+      const res = await fetch(`/api/v1/students/${id}/essays`);
+      const data = await res.json();
+      // Get first essay or null
+      if (data.data && data.data.length > 0) {
+        setEssay(data.data[0]);
+      } else {
         setEssay(null);
-      } finally {
-        setEssayLoading(false);
       }
-    };
+    } catch (error) {
+      console.error("Failed to fetch essay:", error);
+      setEssay(null);
+    } finally {
+      setEssayLoading(false);
+    }
+  };
 
+  useEffect(() => {
     if (id) {
       fetchEssay();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
   const { data, isLoading, error } = useQuery({
@@ -147,14 +148,36 @@ export default function StudentDetailPage({
   };
 
   const handleSaveEssay = async (title: string, content: string) => {
-    // In a real app, this would save to database
-    // For now, just show success
-    return new Promise<void>((resolve) => {
-      setTimeout(() => {
-        console.log("Saving essay:", { title, content });
-        resolve();
-      }, 500);
-    });
+    if (!essay?.id) {
+      throw new Error("No essay ID available");
+    }
+
+    try {
+      // Calculate word count
+      const wordCount = content.trim().split(/\s+/).filter(Boolean).length;
+
+      const response = await fetch(`/api/v1/essays/${essay.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title,
+          content,
+          word_count: wordCount,
+        }),
+      });
+
+      const result = await response.json();
+
+      if (!result.success) {
+        throw new Error(result.error || "Failed to save essay");
+      }
+
+      // Update local state with saved essay
+      setEssay(result.data);
+    } catch (error) {
+      console.error("Error saving essay:", error);
+      throw error; // Re-throw to let the editor handle it
+    }
   };
 
   const handleCreateNewEssay = async () => {
@@ -173,6 +196,8 @@ export default function StudentDetailPage({
       if (result.success && result.data) {
         setEssay(result.data);
         toast.success("New essay created!");
+        // Refetch essays to ensure we have the latest data
+        await fetchEssay();
       } else {
         throw new Error(result.error || "Failed to create essay");
       }
