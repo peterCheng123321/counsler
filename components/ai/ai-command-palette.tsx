@@ -435,7 +435,7 @@ export function AICommandPalette({ open, onOpenChange }: AICommandPaletteProps) 
       </CommandList>
 
       <div className="border-t px-3 py-2 text-xs text-muted-foreground">
-        <span>💡 Tip: Try natural language like &quot;show me high priority tasks&quot; or &quot;open Sarah&apos;s profile&quot;</span>
+        <span>💡 Tip: Press <kbd className="px-1 py-0.5 mx-1 rounded bg-muted border font-mono text-[10px]">Space</kbd> to open command palette. Try natural language like &quot;show me high priority tasks&quot;</span>
       </div>
     </CommandDialog>
   );
@@ -449,8 +449,13 @@ export function useAICommandPalette() {
 
   useEffect(() => {
     const down = (e: globalThis.KeyboardEvent) => {
-      // Cmd+K or Ctrl+K to open command palette
-      if (e.key === "k" && (e.metaKey || e.ctrlKey)) {
+      // Space bar to open command palette (only if not in an input/textarea)
+      const target = e.target as HTMLElement;
+      const isInputField = target.tagName === "INPUT" ||
+                          target.tagName === "TEXTAREA" ||
+                          target.isContentEditable;
+
+      if (e.key === " " && !isInputField) {
         e.preventDefault();
         setOpen((open) => !open);
       }

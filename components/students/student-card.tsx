@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { Building2, FileText, UserCheck, Clock } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
@@ -21,6 +21,13 @@ export function StudentCard({ student }: StudentCardProps) {
   const [pendingAction, setPendingAction] = useState<AIAction | null>(null);
   const [showConfirmation, setShowConfirmation] = useState(false);
   const [confirmationMessage, setConfirmationMessage] = useState("");
+  const [stats, setStats] = useState({
+    collegesApplied: 0,
+    essaysComplete: 0,
+    lorsRequested: 0,
+    nextDeadline: null as Date | null,
+  });
+  const [loading, setLoading] = useState(true);
 
   const handleActionSelect = (action: AIAction, message: string) => {
     setPendingAction(action);
@@ -30,13 +37,53 @@ export function StudentCard({ student }: StudentCardProps) {
   const initials = `${student.first_name[0]}${student.last_name[0]}`.toUpperCase();
   const fullName = `${student.first_name} ${student.last_name}`;
 
-  // Mock data - will be replaced with real data when we add college/essay queries
-  const mockStats = {
-    collegesApplied: 0,
-    essaysComplete: 0,
-    lorsRequested: 0,
-    nextDeadline: null as Date | null,
-  };
+  // Fetch real data from database
+  useEffect(() => {
+    const fetchStats = async () => {
+      try {
+        setLoading(true);
+        
+        // Fetch colleges applied
+        const collegesRes = await fetch(`/api/v1/students/${student.id}/colleges`);
+        const collegesData = await collegesRes.json();
+        const collegesApplied = collegesData.data?.length || 0;
+
+        // Fetch essays
+        const essaysRes = await fetch(`/api/v1/students/${student.id}/essays`);
+        const essaysData = await essaysRes.json();
+        const essaysComplete = essaysData.data?.filter((e: any) => e.status === "completed").length || 0;
+
+        // Fetch LORs
+        const lorsRes = await fetch(`/api/v1/students/${student.id}/lors`);
+        const lorsData = await lorsRes.json();
+        const lorsRequested = lorsData.data?.length || 0;
+
+        // Find next deadline from colleges
+        let nextDeadline = null as Date | null;
+        if (collegesData.data && collegesData.data.length > 0) {
+          const deadlines = collegesData.data
+            .filter((c: any) => c.application_deadline)
+            .map((c: any) => new Date(c.application_deadline))
+            .sort((a: Date, b: Date) => a.getTime() - b.getTime());
+          nextDeadline = deadlines[0] || null;
+        }
+
+        setStats({
+          collegesApplied,
+          essaysComplete,
+          lorsRequested,
+          nextDeadline,
+        });
+      } catch (error) {
+        console.error("Failed to fetch student stats:", error);
+        // Keep default values on error
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchStats();
+  }, [student.id]);
 
   return (
     <>
@@ -82,25 +129,25 @@ export function StudentCard({ student }: StudentCardProps) {
               <div className="mb-4 space-y-2">
                 <div className="flex items-center gap-2 text-body-sm text-text-secondary">
                   <Building2 className="h-4 w-4 text-primary" />
-                  <span>Applied: {mockStats.collegesApplied} colleges</span>
+                  <span>Applied: {stats.collegesApplied} colleges</span>
                 </div>
                 <div className="flex items-center gap-2 text-body-sm text-text-secondary">
                   <FileText className="h-4 w-4 text-primary" />
-                  <span>Essays: {mockStats.essaysComplete} complete</span>
+                  <span>Essays: {stats.essaysComplete} complete</span>
                 </div>
                 <div className="flex items-center gap-2 text-body-sm text-text-secondary">
                   <UserCheck className="h-4 w-4 text-primary" />
-                  <span>LOR: {mockStats.lorsRequested} requested</span>
+                  <span>LOR: {stats.lorsRequested} requested</span>
                 </div>
               </div>
 
               {/* Next Deadline */}
-              {mockStats.nextDeadline && (
+              {stats.nextDeadline && (
                 <div className="rounded-md border border-warning bg-warning-light p-2">
                   <div className="flex items-center gap-2 text-body-sm text-warning">
                     <Clock className="h-4 w-4" />
                     <span>
-                      Next: {format(mockStats.nextDeadline, "MMM d, yyyy")}
+                      Next: {format(stats.nextDeadline, "MMM d, yyyy")}
                     </span>
                   </div>
                 </div>

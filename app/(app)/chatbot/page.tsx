@@ -508,7 +508,7 @@ function ChatbotContent() {
             <div className="px-2 flex items-center gap-3">
               <div className="flex items-center gap-2">
                 <Brain className="h-4 w-4 text-primary" />
-                <span className="text-sm font-medium text-text-secondary">Agent Mode:</span>
+                <span className="text-sm font-medium text-text-secondary">AI Mode:</span>
               </div>
               <Select
                 value={agentMode}
@@ -521,14 +521,14 @@ function ChatbotContent() {
                   <SelectItem value="langgraph">
                     <div className="flex items-center gap-2">
                       <Zap className="h-3 w-3" />
-                      <span>LangGraph</span>
+                      <span>Advanced</span>
                       <Badge variant="outline" className="text-xs ml-1">Recommended</Badge>
                     </div>
                   </SelectItem>
                   <SelectItem value="langchain">
                     <div className="flex items-center gap-2">
                       <Brain className="h-3 w-3" />
-                      <span>LangChain</span>
+                      <span>Standard</span>
                     </div>
                   </SelectItem>
                 </SelectContent>

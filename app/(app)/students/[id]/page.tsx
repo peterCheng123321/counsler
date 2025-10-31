@@ -44,21 +44,34 @@ export default function StudentDetailPage({
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  // Mock essay data
-  const [essay] = useState({
-    id: "mock-essay-1",
-    title: "The Moment That Changed Everything",
-    content: `The summer before my junior year, I stood in front of my grandmother's old sewing machine, completely lost. She had passed away three months earlier, and this machine was the last connection I had to her. I had always admired her handmade quilts but never learned how to make them myself.
+  // Fetch essay data from database
+  const [essay, setEssay] = useState<any>(null);
+  const [essayLoading, setEssayLoading] = useState(true);
 
-That day, I made a decision that would change my life. I decided to learn quilting, not just to honor her memory, but to understand the patience and dedication she poured into every stitch. What started as a simple gesture of remembrance became a journey of self-discovery.
+  useEffect(() => {
+    const fetchEssay = async () => {
+      try {
+        setEssayLoading(true);
+        const res = await fetch(`/api/v1/students/${id}/essays`);
+        const data = await res.json();
+        // Get first essay or null
+        if (data.data && data.data.length > 0) {
+          setEssay(data.data[0]);
+        } else {
+          setEssay(null);
+        }
+      } catch (error) {
+        console.error("Failed to fetch essay:", error);
+        setEssay(null);
+      } finally {
+        setEssayLoading(false);
+      }
+    };
 
-Learning to quilt taught me more than just a craft. It taught me that mistakes are just opportunities to create something unique. When I accidentally sewed two pieces backwards, instead of seeing it as a failure, I saw it as a new pattern emerging. This mindset has influenced how I approach challenges in my academic life.
-
-In my AP Calculus class, when I struggled with integrals, I remembered those backward stitches. I stopped seeing math problems as obstacles and started seeing them as patterns waiting to be discovered. My grade improved from a B- to an A, but more importantly, my relationship with learning transformed.
-
-Now, I lead a quilting club at school where we create quilts for children in hospitals. We've made over 50 quilts this year, and each one carries the same lesson my grandmother taught me: that beauty often comes from unexpected places, and patience can turn mistakes into masterpieces.`,
-    status: "pending_review",
-  });
+    if (id) {
+      fetchEssay();
+    }
+  }, [id]);
 
   const { data, isLoading, error } = useQuery({
     queryKey: ["student", id],

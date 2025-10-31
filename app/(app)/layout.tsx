@@ -17,7 +17,7 @@ export default function AppLayout({
         {children}
       </main>
 
-      {/* Global AI Command Palette (Cmd+K or /) */}
+      {/* Global AI Command Palette (Space bar) */}
       <AICommandPalette open={open} onOpenChange={setOpen} />
     </>
   );
