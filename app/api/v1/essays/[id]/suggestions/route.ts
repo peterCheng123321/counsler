@@ -5,13 +5,14 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { createLLM } from "@/lib/ai/llm-factory";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { id } = await params;
+    const { id: essayId } = await params;
     const body = await request.json();
     const { essay_text, prompt_type } = body;
 
@@ -20,6 +21,42 @@ export async function POST(
         { error: "Essay text is required" },
         { status: 400 }
       );
+    }
+
+    // Fetch essay and student data to provide context
+    const supabase = createAdminClient();
+    const { data: essay } = await supabase
+      .from("essays")
+      .select(`
+        *,
+        students (
+          first_name,
+          last_name,
+          graduation_year,
+          gpa_unweighted,
+          gpa_weighted,
+          sat_score,
+          act_score,
+          application_progress
+        )
+      `)
+      .eq("id", essayId)
+      .single();
+
+    const student = essay?.students;
+    let studentContext = "";
+
+    if (student) {
+      studentContext = `\n\nSTUDENT PROFILE CONTEXT:
+- Name: ${student.first_name} ${student.last_name}
+- Graduation Year: ${student.graduation_year || "Not specified"}
+- GPA (Unweighted): ${student.gpa_unweighted || "Not specified"}
+- GPA (Weighted): ${student.gpa_weighted || "Not specified"}
+- SAT Score: ${student.sat_score || "Not specified"}
+- ACT Score: ${student.act_score || "Not specified"}
+- Application Progress: ${student.application_progress || 0}%
+
+Use this student profile to provide personalized feedback that considers their academic background and application stage.`;
     }
 
     // Create system prompt based on suggestion type
@@ -34,7 +71,7 @@ export async function POST(
 
     const userPrompt = `Please analyze this college application essay and provide detailed suggestions for improvement:
 
-${essay_text}
+${essay_text}${studentContext}
 
 IMPORTANT: Respond ONLY with valid JSON in exactly this format (no markdown, no code blocks, just pure JSON):
 {
@@ -129,7 +166,18 @@ Provide at least 3-5 suggestions, 3 strengths, and 3 areas for improvement.`;
 
     return NextResponse.json({
       success: true,
-      data: suggestions,
+      data: {
+        ...suggestions,
+        student_context: student ? {
+          name: `${student.first_name} ${student.last_name}`,
+          graduation_year: student.graduation_year,
+          gpa_unweighted: student.gpa_unweighted,
+          gpa_weighted: student.gpa_weighted,
+          sat_score: student.sat_score,
+          act_score: student.act_score,
+          application_progress: student.application_progress,
+        } : null
+      },
     });
 
   } catch (error) {
