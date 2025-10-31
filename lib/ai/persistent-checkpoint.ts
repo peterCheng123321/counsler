@@ -166,6 +166,36 @@ export class SupabaseCheckpointSaver extends BaseCheckpointSaver {
   }
 
   /**
+   * Put writes (required by BaseCheckpointSaver)
+   */
+  async putWrites(
+    config: RunnableConfig,
+    writes: any[],
+    taskId: string
+  ): Promise<void> {
+    // Not implemented for basic checkpoint saver
+    // This would be used for more advanced features
+    console.log("[SupabaseCheckpointSaver] putWrites called (not implemented)");
+  }
+
+  /**
+   * Delete thread (required by BaseCheckpointSaver)
+   */
+  async deleteThread(threadId: string): Promise<void> {
+    try {
+      await this.supabase
+        .from("agent_checkpoints")
+        .delete()
+        .eq("thread_id", threadId);
+
+      console.log(`[SupabaseCheckpointSaver] Deleted thread ${threadId}`);
+    } catch (error) {
+      console.error("[SupabaseCheckpointSaver] Error deleting thread:", error);
+      throw error;
+    }
+  }
+
+  /**
    * Save a checkpoint to Supabase
    */
   async put(
