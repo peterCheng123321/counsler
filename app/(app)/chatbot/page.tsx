@@ -443,6 +443,50 @@ function ChatbotContent() {
             {selectedConversation ? "Chat" : "New Chat"}
           </h1>
         </div>
+        {/* Header with AI Mode Selector */}
+        <div className="border-b border-border/30 bg-gradient-to-b from-background via-background/98 to-transparent p-4 md:p-6 backdrop-blur-sm">
+          <div className="mx-auto max-w-4xl flex items-center justify-between">
+            <h1 className="text-lg font-semibold text-text-primary">Chat</h1>
+            
+            {/* Agent Mode Selector */}
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2">
+                <Brain className="h-4 w-4 text-primary" />
+                <span className="text-sm font-medium text-text-secondary">AI Mode:</span>
+              </div>
+              <Select
+                value={agentMode}
+                onValueChange={(value) => setAgentMode(value as "langchain" | "langgraph")}
+              >
+                <SelectTrigger className="w-48 h-8 text-sm">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="langgraph">
+                    <div className="flex flex-col gap-0.5">
+                      <div className="flex items-center gap-2">
+                        <Zap className="h-3 w-3" />
+                        <span className="font-semibold">Expert</span>
+                        <Badge variant="outline" className="text-xs">Recommended</Badge>
+                      </div>
+                      <span className="text-xs text-muted-foreground ml-5">Better accuracy, may take longer</span>
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="langchain">
+                    <div className="flex flex-col gap-0.5">
+                      <div className="flex items-center gap-2">
+                        <Brain className="h-3 w-3" />
+                        <span className="font-semibold">Speed</span>
+                      </div>
+                      <span className="text-xs text-muted-foreground ml-5">Faster responses</span>
+                    </div>
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+        </div>
+
         {/* Messages Area */}
         <div className="flex-1 overflow-y-auto p-6 md:p-8 lg:p-12">
           <div className="mx-auto max-w-4xl space-y-6">
@@ -544,43 +588,6 @@ function ChatbotContent() {
                 />
               </div>
             )}
-
-            {/* Agent Mode Selector */}
-            <div className="px-2 flex items-center gap-3">
-              <div className="flex items-center gap-2">
-                <Brain className="h-4 w-4 text-primary" />
-                <span className="text-sm font-medium text-text-secondary">AI Mode:</span>
-              </div>
-              <Select
-                value={agentMode}
-                onValueChange={(value) => setAgentMode(value as "langchain" | "langgraph")}
-              >
-                <SelectTrigger className="w-48 h-8 text-sm">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="langgraph">
-                    <div className="flex flex-col gap-0.5">
-                      <div className="flex items-center gap-2">
-                        <Zap className="h-3 w-3" />
-                        <span className="font-semibold">Expert</span>
-                        <Badge variant="outline" className="text-xs">Recommended</Badge>
-                      </div>
-                      <span className="text-xs text-muted-foreground ml-5">Better accuracy, may take longer</span>
-                    </div>
-                  </SelectItem>
-                  <SelectItem value="langchain">
-                    <div className="flex flex-col gap-0.5">
-                      <div className="flex items-center gap-2">
-                        <Brain className="h-3 w-3" />
-                        <span className="font-semibold">Speed</span>
-                      </div>
-                      <span className="text-xs text-muted-foreground ml-5">Faster responses</span>
-                    </div>
-                  </SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
 
             {/* Input Box - Modern Floating Style */}
             <div className="group relative">
