@@ -85,7 +85,7 @@ LANGCHAIN_PROJECT=consuler-prod
 **In Production Supabase**:
 
 1. Open SQL Editor
-2. Run ALL SQL from `FIX_AGENT_DASHBOARD.md`
+2. Run ALL SQL from `SAFE_AGENT_SETUP.sql` (or from `FIX_AGENT_DASHBOARD.md` - both work)
 3. **MUST reload schema cache** (Settings → API → Reload schema)
 4. Verify tables exist:
    ```sql
