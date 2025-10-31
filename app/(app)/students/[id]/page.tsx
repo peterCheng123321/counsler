@@ -588,7 +588,7 @@ export default function StudentDetailPage({
                   No Essays Yet
                 </h3>
                 <p className="text-text-secondary mb-4">
-                  This student hasn't started any essays yet.
+                  This student hasn&apos;t started any essays yet.
                 </p>
                 <Button onClick={handleCreateNewEssay}>Create New Essay</Button>
               </div>

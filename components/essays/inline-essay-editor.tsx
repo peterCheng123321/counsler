@@ -12,6 +12,7 @@ import {
   Loader2,
   Save,
   X,
+  CheckCircle,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -349,7 +350,7 @@ export function InlineEssayEditor({
                   <div className="flex-1">
                     <p className="text-sm font-bold text-blue-900 mb-2">Analysis Context</p>
                     <p className="text-xs text-blue-700 mb-3">
-                      This analysis is personalized based on <strong>{analysis.student_context.name}'s</strong> academic profile:
+                      This analysis is personalized based on <strong>{analysis.student_context.name}&apos;s</strong> academic profile:
                     </p>
                     <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                       {analysis.student_context.graduation_year && (
