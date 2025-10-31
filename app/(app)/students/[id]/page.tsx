@@ -13,6 +13,8 @@ import { Badge } from "@/components/ui/badge";
 import { ChatMessage } from "@/components/chatbot/chat-message";
 import { InlineEssayEditor } from "@/components/essays/inline-essay-editor";
 import { UploadModal } from "@/components/upload/upload-modal";
+import { StudentEditDialog } from "@/components/students/student-edit-dialog";
+import { CollegeManagement } from "@/components/students/college-management";
 import { apiClient } from "@/lib/api/client";
 import { toast } from "sonner";
 
@@ -38,6 +40,7 @@ export default function StudentDetailPage({
   const [isTyping, setIsTyping] = useState(false);
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [uploadFileType, setUploadFileType] = useState<"profile" | "resume" | "transcript">("profile");
+  const [showEditDialog, setShowEditDialog] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -208,17 +211,12 @@ Now, I lead a quilting club at school where we create quilts for children in hos
           </div>
           <div className="flex gap-2">
             <Button
+              onClick={() => setShowEditDialog(true)}
               variant="secondary"
               className="bg-white/20 backdrop-blur-sm border-white/30 text-white hover:bg-white/30"
             >
               <Edit className="h-4 w-4 mr-2" />
               Edit
-            </Button>
-            <Button
-              variant="secondary"
-              className="bg-white/20 backdrop-blur-sm border-white/30 text-white hover:bg-white/30"
-            >
-              <MoreVertical className="h-4 w-4" />
             </Button>
           </div>
         </div>
@@ -520,8 +518,7 @@ Now, I lead a quilting club at school where we create quilts for children in hos
         {/* Colleges Tab */}
         {activeTab === "colleges" && (
           <div className="p-6">
-            <h2 className="text-xl font-semibold text-text-primary mb-4">College Applications</h2>
-            <p className="text-text-secondary">College application data will be displayed here.</p>
+            <CollegeManagement studentId={id} />
           </div>
         )}
 
@@ -567,6 +564,18 @@ Now, I lead a quilting club at school where we create quilts for children in hos
               : student.transcript_url
           }
           onUploadComplete={handleUploadComplete}
+        />
+      )}
+
+      {/* Edit Student Dialog */}
+      {student && (
+        <StudentEditDialog
+          open={showEditDialog}
+          onOpenChange={setShowEditDialog}
+          student={student}
+          onSuccess={() => {
+            queryClient.invalidateQueries({ queryKey: ["student", id] });
+          }}
         />
       )}
     </div>

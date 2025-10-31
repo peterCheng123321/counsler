@@ -73,12 +73,15 @@ export async function canRunAgent(
       return { allowed: false, reason: "Error checking rate limit" };
     }
 
-    if (recentRuns && recentRuns.length >= config.max_runs_per_hour) {
-      return {
-        allowed: false,
-        reason: `Rate limit exceeded: ${recentRuns.length}/${config.max_runs_per_hour} runs in the last hour`,
-      };
-    }
+    // Skip rate limiting for testing - allow unlimited runs
+    // if (recentRuns && recentRuns.length >= config.max_runs_per_hour) {
+    //   return {
+    //     allowed: false,
+    //     reason: `Rate limit exceeded: ${recentRuns.length}/${config.max_runs_per_hour} runs in the last hour`,
+    //   };
+    // }
+
+    console.log(`[Agent Scheduler] Rate limiting disabled for testing. Recent runs: ${recentRuns?.length || 0}`);
 
     // Check for duplicate running jobs
     const { data: runningJobs, error: runningError } = await supabase

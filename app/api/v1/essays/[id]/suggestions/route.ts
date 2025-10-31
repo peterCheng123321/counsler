@@ -36,21 +36,26 @@ export async function POST(
 
 ${essay_text}
 
-Provide your suggestions in the following JSON format:
+IMPORTANT: Respond ONLY with valid JSON in exactly this format (no markdown, no code blocks, just pure JSON):
 {
   "suggestions": [
     {
-      "category": "grammar" | "structure" | "content" | "style",
-      "severity": "high" | "medium" | "low",
+      "category": "grammar",
+      "severity": "high",
       "issue": "Brief description of the issue",
       "suggestion": "Specific suggestion for improvement",
       "example": "Optional example of how to fix it"
     }
   ],
-  "overall_feedback": "Brief overall assessment",
-  "strengths": ["List of strengths"],
-  "areas_for_improvement": ["List of areas to improve"]
-}`;
+  "overall_feedback": "Brief overall assessment (2-3 sentences)",
+  "strengths": ["Strength 1", "Strength 2", "Strength 3"],
+  "areas_for_improvement": ["Area 1", "Area 2", "Area 3"]
+}
+
+Category must be one of: grammar, structure, content, style
+Severity must be one of: high, medium, low
+
+Provide at least 3-5 suggestions, 3 strengths, and 3 areas for improvement.`;
 
     // Call AI
     const llm = createLLM({
@@ -67,45 +72,58 @@ Provide your suggestions in the following JSON format:
       ? response.content
       : JSON.stringify(response.content);
 
-    // Try to parse JSON response
+    // Try to parse JSON response with improved extraction
     let suggestions;
     try {
-      // Find JSON in the response
-      const jsonMatch = content.match(/\{[\s\S]*\}/);
+      // Remove markdown code blocks if present
+      let cleanContent = content
+        .replace(/```json\s*/g, "")
+        .replace(/```\s*/g, "")
+        .trim();
+
+      // Try to find JSON object
+      const jsonMatch = cleanContent.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
-        suggestions = JSON.parse(jsonMatch[0]);
+        const parsed = JSON.parse(jsonMatch[0]);
+
+        // Validate structure
+        if (parsed.suggestions && Array.isArray(parsed.suggestions)) {
+          suggestions = {
+            suggestions: parsed.suggestions.map((s: any) => ({
+              category: s.category || "overall",
+              severity: s.severity || "medium",
+              issue: s.issue || "Review needed",
+              suggestion: s.suggestion || "",
+              example: s.example || "",
+            })),
+            overall_feedback: parsed.overall_feedback || "Analysis complete",
+            strengths: Array.isArray(parsed.strengths) ? parsed.strengths : [],
+            areas_for_improvement: Array.isArray(parsed.areas_for_improvement)
+              ? parsed.areas_for_improvement
+              : [],
+          };
+        } else {
+          throw new Error("Invalid JSON structure");
+        }
       } else {
-        // If no JSON found, structure the response
-        suggestions = {
-          suggestions: [
-            {
-              category: "overall",
-              severity: "medium",
-              issue: "AI Response",
-              suggestion: content,
-              example: ""
-            }
-          ],
-          overall_feedback: content.substring(0, 200),
-          strengths: [],
-          areas_for_improvement: []
-        };
+        throw new Error("No JSON found in response");
       }
     } catch (parseError) {
-      // If parsing fails, return raw response
+      console.error("[Essay API] JSON parse error:", parseError);
+      // Return structured fallback with the raw content
       suggestions = {
         suggestions: [
           {
-            category: "overall",
+            category: "content",
             severity: "medium",
-            issue: "AI Response",
-            suggestion: content,
+            issue: "AI analysis completed",
+            suggestion: content.substring(0, 500),
             example: ""
           }
         ],
-        overall_feedback: content.substring(0, 200),
-        strengths: [],
-        areas_for_improvement: []
+        overall_feedback: "The AI provided feedback in an unexpected format. Please review the suggestion above.",
+        strengths: ["Your essay shows effort and thought"],
+        areas_for_improvement: ["Consider reviewing the AI's raw feedback for specific suggestions"]
       };
     }
 
