@@ -133,14 +133,23 @@ export async function POST(request: NextRequest) {
 
                   case "tool":
                     toolsUsed = true;
-                    toolResults.push(event.content);
+                    console.log(`[Chat API] Tool call received: ${event.content.toolName}`);
+                    // Store full tool result for later
+                    toolResults.push({
+                      toolName: event.content.toolName,
+                      result: JSON.stringify(event.content.args),
+                      success: true,
+                    });
+                    // Stream tool call to frontend with arguments
                     await sendSSEChunk(controller, {
                       type: "tool_call",
                       toolCall: {
                         name: event.content.toolName,
+                        args: event.content.args,
                         id: "langgraph-tool",
                       },
                     });
+                    console.log(`[Chat API] Tool call sent to frontend: ${event.content.toolName}`);
                     break;
 
                   case "insight":

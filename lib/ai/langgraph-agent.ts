@@ -314,12 +314,14 @@ export async function* streamLangGraphAgent(
     const toolResults: ToolResult[] = [];
 
     try {
+      const seenToolCalls = new Set<string>(); // Track which tools we've already reported
+
       for await (const event of stream) {
         // Stream messages
         if (event.messages && event.messages.length > 0) {
           const lastMessage = event.messages[event.messages.length - 1];
 
-          // Stream AI message content
+          // Detect tool calls from AI messages (before execution)
           if (lastMessage._getType() === "ai") {
             const content = typeof lastMessage.content === "string"
               ? lastMessage.content
@@ -335,21 +337,49 @@ export async function* streamLangGraphAgent(
               };
             }
 
-            // Report tool calls
+            // Report tool calls as they are planned
             if ("tool_calls" in lastMessage && lastMessage.tool_calls && Array.isArray(lastMessage.tool_calls)) {
               for (const toolCall of lastMessage.tool_calls) {
-                const toolResult: ToolResult = {
-                  toolName: toolCall.name || "unknown",
-                  result: JSON.stringify(toolCall.args),
-                  success: true,
-                };
-                toolResults.push(toolResult);
+                const toolKey = `${toolCall.name}-${toolCall.id || JSON.stringify(toolCall.args)}`;
 
-                yield {
-                  type: "tool",
-                  content: toolResult,
-                };
+                // Only report each tool call once
+                if (!seenToolCalls.has(toolKey)) {
+                  seenToolCalls.add(toolKey);
+
+                  const toolResult: ToolResult = {
+                    toolName: toolCall.name || "unknown",
+                    result: JSON.stringify(toolCall.args),
+                    success: true,
+                  };
+                  toolResults.push(toolResult);
+
+                  console.log(`[LangGraph Agent] Streaming tool call: ${toolCall.name}`);
+
+                  yield {
+                    type: "tool",
+                    content: {
+                      toolName: toolCall.name || "unknown",
+                      args: toolCall.args,
+                    },
+                  };
+                }
               }
+            }
+          }
+
+          // Also detect tool execution from ToolMessage events
+          if (lastMessage._getType() === "tool") {
+            const toolName = (lastMessage as any).name || "unknown";
+            const toolKey = `${toolName}-executed`;
+
+            // Report tool execution if we haven't seen it yet
+            if (!seenToolCalls.has(toolKey)) {
+              seenToolCalls.add(toolKey);
+
+              console.log(`[LangGraph Agent] Tool executed: ${toolName}`);
+
+              // We don't yield here to avoid duplicate reporting
+              // The tool_calls from AI message already reported it
             }
           }
         }
