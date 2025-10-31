@@ -26,20 +26,7 @@ export async function GET(request: NextRequest) {
 
     let query = supabase
       .from("agent_insights")
-      .select(`
-        *,
-        agent_runs (
-          run_type,
-          started_at
-        ),
-        students (
-          id,
-          first_name,
-          last_name,
-          email,
-          graduation_year
-        )
-      `)
+      .select("*")
       .eq("counselor_id", counselorId)
       .eq("status", status)
       .order("created_at", { ascending: false })

@@ -36,39 +36,9 @@ export async function GET(
     }
 
     // Get all colleges for this student
-    const { data, error } = await supabase
+    const { data: studentColleges, error } = await supabase
       .from("student_colleges")
-      .select(
-        `
-        id,
-        application_type,
-        deadline,
-        college_type,
-        application_portal,
-        application_status,
-        application_progress,
-        essays_required,
-        essays_completed,
-        lors_required,
-        lors_completed,
-        transcript_requested,
-        transcript_received,
-        test_scores_sent,
-        created_at,
-        updated_at,
-        colleges (
-          id,
-          name,
-          location_city,
-          location_state,
-          location_country,
-          type,
-          acceptance_rate,
-          logo_url,
-          website_url
-        )
-      `
-      )
+      .select("*")
       .eq("student_id", studentId)
       .order("deadline", { ascending: true, nullsFirst: false });
 
@@ -79,6 +49,29 @@ export async function GET(
         { status: 500 }
       );
     }
+
+    // Fetch college details separately if we have college IDs
+    const collegeIds = (studentColleges || [])
+      .map((sc: any) => sc.college_id)
+      .filter(Boolean);
+
+    let collegesData: any[] = [];
+    if (collegeIds.length > 0) {
+      const { data: colleges } = await supabase
+        .from("colleges")
+        .select("*")
+        .in("id", collegeIds);
+      collegesData = colleges || [];
+    }
+
+    // Merge college data with student_colleges
+    const data = (studentColleges || []).map((sc: any) => {
+      const college = collegesData.find((c: any) => c.id === sc.college_id);
+      return {
+        ...sc,
+        colleges: college || null,
+      };
+    });
 
     return NextResponse.json({ data, success: true });
   } catch (error) {
@@ -162,7 +155,7 @@ export async function POST(
     }
 
     // Create student-college relationship
-    const { data, error } = await supabase
+    const { data: studentCollege, error } = await supabase
       .from("student_colleges")
       .insert({
         student_id: studentId,
@@ -173,29 +166,7 @@ export async function POST(
         application_status: validatedData.applicationStatus,
         application_portal: validatedData.applicationPortal || null,
       })
-      .select(
-        `
-        id,
-        application_type,
-        deadline,
-        college_type,
-        application_portal,
-        application_status,
-        application_progress,
-        created_at,
-        colleges (
-          id,
-          name,
-          location_city,
-          location_state,
-          location_country,
-          type,
-          acceptance_rate,
-          logo_url,
-          website_url
-        )
-      `
-      )
+      .select("*")
       .single();
 
     if (error) {
