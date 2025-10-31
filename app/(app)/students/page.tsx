@@ -8,7 +8,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { StudentCard } from "@/components/students/student-card";
 import { AddStudentModal } from "@/components/students/add-student-modal";
-import { BulkUploadModal } from "@/components/students/bulk-upload-modal";
 import { AIBulkUploadModal } from "@/components/students/ai-bulk-upload-modal";
 import { StudentFilters } from "@/components/students/student-filters";
 import { StatsCard } from "@/components/charts/stats-card";
@@ -23,8 +22,8 @@ function StudentsPageContent() {
   const searchParams = useSearchParams();
   const [searchQuery, setSearchQuery] = useState("");
   const [showAddModal, setShowAddModal] = useState(false);
-  const [showBulkUploadModal, setShowBulkUploadModal] = useState(false);
-  const [showAIBulkUploadModal, setShowAIBulkUploadModal] = useState(false);
+  const [showUnifiedUploadModal, setShowUnifiedUploadModal] = useState(false);
+  const [uploadMode, setUploadMode] = useState<"ai" | "csv">("ai");
   const [filters, setFilters] = useState<{
     graduationYear?: number;
     progressMin?: number;
@@ -152,18 +151,14 @@ function StudentsPageContent() {
           />
           <Button
             variant="outline"
-            onClick={() => setShowBulkUploadModal(true)}
-          >
-            <Upload className="h-4 w-4 mr-2" />
-            Bulk Upload
-          </Button>
-          <Button
-            variant="outline"
-            onClick={() => setShowAIBulkUploadModal(true)}
+            onClick={() => {
+              setUploadMode("ai");
+              setShowUnifiedUploadModal(true);
+            }}
             className="border-primary text-primary hover:bg-primary hover:text-white"
           >
             <Sparkles className="h-4 w-4 mr-2" />
-            AI Bulk Upload
+            Upload Students
           </Button>
           <Button onClick={() => setShowAddModal(true)}>
             <Plus className="h-4 w-4 mr-2" />
@@ -357,16 +352,10 @@ function StudentsPageContent() {
         onOpenChange={setShowAddModal}
       />
 
-      {/* Bulk Upload Modal */}
-      <BulkUploadModal
-        open={showBulkUploadModal}
-        onOpenChange={setShowBulkUploadModal}
-      />
-
-      {/* AI Bulk Upload Modal */}
+      {/* Upload Students Modal (AI-powered) */}
       <AIBulkUploadModal
-        open={showAIBulkUploadModal}
-        onOpenChange={setShowAIBulkUploadModal}
+        open={showUnifiedUploadModal}
+        onOpenChange={setShowUnifiedUploadModal}
       />
     </div>
   );

@@ -157,6 +157,31 @@ export default function StudentDetailPage({
     });
   };
 
+  const handleCreateNewEssay = async () => {
+    try {
+      const response = await fetch(`/api/v1/students/${id}/essays`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: "Untitled Essay",
+          content: "",
+        }),
+      });
+
+      const result = await response.json();
+
+      if (result.success && result.data) {
+        setEssay(result.data);
+        toast.success("New essay created!");
+      } else {
+        throw new Error(result.error || "Failed to create essay");
+      }
+    } catch (error) {
+      console.error("Failed to create essay:", error);
+      toast.error("Failed to create new essay");
+    }
+  };
+
   const handleOpenUploadModal = (fileType: "profile" | "resume" | "transcript") => {
     setUploadFileType(fileType);
     setShowUploadModal(true);
@@ -544,12 +569,30 @@ export default function StudentDetailPage({
                 Edit the essay and get AI-powered suggestions for improvement
               </p>
             </div>
-            <InlineEssayEditor
-              essayId={essay.id}
-              initialTitle={essay.title}
-              initialContent={essay.content}
-              onSave={handleSaveEssay}
-            />
+
+            {essayLoading ? (
+              <div className="flex items-center justify-center p-12">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+              </div>
+            ) : essay ? (
+              <InlineEssayEditor
+                essayId={essay.id}
+                initialTitle={essay.title}
+                initialContent={essay.content}
+                onSave={handleSaveEssay}
+              />
+            ) : (
+              <div className="flex flex-col items-center justify-center p-12 text-center">
+                <FileText className="h-16 w-16 text-text-tertiary mb-4" />
+                <h3 className="text-lg font-semibold text-text-primary mb-2">
+                  No Essays Yet
+                </h3>
+                <p className="text-text-secondary mb-4">
+                  This student hasn't started any essays yet.
+                </p>
+                <Button onClick={handleCreateNewEssay}>Create New Essay</Button>
+              </div>
+            )}
           </div>
         )}
 
