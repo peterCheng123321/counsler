@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, Suspense } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useSearchParams } from "next/navigation";
 import { Plus, Filter, Calendar, List, CheckCircle, Clock, AlertCircle, ListTodo } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { TaskCard } from "@/components/tasks/task-card";
@@ -17,7 +18,8 @@ import { apiClient, type Task } from "@/lib/api/client";
 import { format, startOfWeek, endOfWeek, eachDayOfInterval, isSameDay } from "date-fns";
 import { toast } from "sonner";
 
-export default function TasksPage() {
+function TasksPageContent() {
+  const searchParams = useSearchParams();
   const [showAddModal, setShowAddModal] = useState(false);
   const [view, setView] = useState<"list" | "calendar">("list");
   const [filters, setFilters] = useState<{
@@ -27,6 +29,39 @@ export default function TasksPage() {
     dueDateFrom?: string;
     dueDateTo?: string;
   }>({});
+
+  // Read URL parameters and apply them
+  useEffect(() => {
+    const urlView = searchParams.get("view");
+    if (urlView === "calendar" || urlView === "list") {
+      setView(urlView);
+    }
+
+    const urlFilters: {
+      status?: string;
+      priority?: string;
+      studentId?: string;
+      dueDateFrom?: string;
+      dueDateTo?: string;
+    } = {};
+
+    const status = searchParams.get("status");
+    const priority = searchParams.get("priority");
+    const studentId = searchParams.get("studentId");
+    const dueDateFrom = searchParams.get("dueDateFrom");
+    const dueDateTo = searchParams.get("dueDateTo");
+
+    if (status) urlFilters.status = status;
+    if (priority) urlFilters.priority = priority;
+    if (studentId) urlFilters.studentId = studentId;
+    if (dueDateFrom) urlFilters.dueDateFrom = dueDateFrom;
+    if (dueDateTo) urlFilters.dueDateTo = dueDateTo;
+
+    // Only update if there are URL parameters
+    if (Object.keys(urlFilters).length > 0) {
+      setFilters(urlFilters);
+    }
+  }, [searchParams]);
 
   const { data, isLoading, error } = useQuery({
     queryKey: ["tasks", filters],
@@ -374,6 +409,14 @@ export default function TasksPage() {
         </button>
       )}
     </div>
+  );
+}
+
+export default function TasksPage() {
+  return (
+    <Suspense fallback={<div className="flex items-center justify-center min-h-screen"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div></div>}>
+      <TasksPageContent />
+    </Suspense>
   );
 }
 

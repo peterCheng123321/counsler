@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, Suspense } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useSearchParams } from "next/navigation";
 import { Plus, Search, Filter, Users, GraduationCap, Target, TrendingUp, Upload, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -18,7 +19,8 @@ import { InsightsPanel } from "@/components/insights/insights-panel";
 import { apiClient, type Student } from "@/lib/api/client";
 import { toast } from "sonner";
 
-export default function StudentsPage() {
+function StudentsPageContent() {
+  const searchParams = useSearchParams();
   const [searchQuery, setSearchQuery] = useState("");
   const [showAddModal, setShowAddModal] = useState(false);
   const [showBulkUploadModal, setShowBulkUploadModal] = useState(false);
@@ -28,6 +30,34 @@ export default function StudentsPage() {
     progressMin?: number;
     progressMax?: number;
   }>({});
+
+  // Read URL parameters and apply filters
+  useEffect(() => {
+    const urlFilters: {
+      graduationYear?: number;
+      progressMin?: number;
+      progressMax?: number;
+    } = {};
+
+    const graduationYear = searchParams.get("graduationYear");
+    const progressMin = searchParams.get("progressMin");
+    const progressMax = searchParams.get("progressMax");
+
+    if (graduationYear) {
+      urlFilters.graduationYear = parseInt(graduationYear);
+    }
+    if (progressMin) {
+      urlFilters.progressMin = parseInt(progressMin);
+    }
+    if (progressMax) {
+      urlFilters.progressMax = parseInt(progressMax);
+    }
+
+    // Only update if there are URL parameters
+    if (Object.keys(urlFilters).length > 0) {
+      setFilters(urlFilters);
+    }
+  }, [searchParams]);
 
   const { data, isLoading, error } = useQuery({
     queryKey: ["students", searchQuery, filters],
@@ -339,6 +369,14 @@ export default function StudentsPage() {
         onOpenChange={setShowAIBulkUploadModal}
       />
     </div>
+  );
+}
+
+export default function StudentsPage() {
+  return (
+    <Suspense fallback={<div className="flex items-center justify-center min-h-screen"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div></div>}>
+      <StudentsPageContent />
+    </Suspense>
   );
 }
 
