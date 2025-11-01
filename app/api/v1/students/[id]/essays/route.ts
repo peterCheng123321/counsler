@@ -59,7 +59,8 @@ export async function POST(
         title: title || "Untitled Essay",
         content: content || "",
         prompt: prompt || null,
-        college_id: college_id || null,
+        word_count: 0,
+        status: "draft",
       })
       .select("*")
       .single();
