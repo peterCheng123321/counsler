@@ -206,7 +206,6 @@ export async function POST() {
           const wordCount = 400 + Math.floor(Math.random() * 250);
           await supabase.from('essays').insert({
             student_id: student.id,
-            counselor_id: DEMO_USER_ID,
             title: `College Essay #${i + 1}`,
             content: `This is a mock essay for ${student.first_name}. Prompt: "${prompt}"\n\n[Essay content - ~${wordCount} words]`,
             prompt,

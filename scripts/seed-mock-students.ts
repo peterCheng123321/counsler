@@ -285,7 +285,6 @@ async function seedMockStudents() {
           .from('essays')
           .insert({
             student_id: student.id,
-            counselor_id: DEMO_USER_ID,
             title: `College Essay #${i + 1}`,
             content: isCompleted
               ? `As I reflect on my journey through high school, I realize that ${mockStudent.first_name}'s experiences have shaped who I am today. This essay addresses the following prompt:\n\n"${selectedPrompts[i]}"\n\nThrough various challenges and triumphs, I've learned the value of perseverance and dedication. My academic pursuits have been complemented by meaningful extracurricular activities that have allowed me to grow both personally and intellectually.\n\n[This is a complete mock essay with approximately ${wordCount} words demonstrating strong writing and personal reflection.]`

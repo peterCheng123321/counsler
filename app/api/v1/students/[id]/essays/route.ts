@@ -55,12 +55,9 @@ export async function POST(
       .from("essays")
       .insert({
         student_id: studentId,
-        counselor_id: userId,
         title: title || "Untitled Essay",
         content: content || "",
         prompt: prompt || null,
-        word_count: 0,
-        status: "draft",
       })
       .select("*")
       .single();
