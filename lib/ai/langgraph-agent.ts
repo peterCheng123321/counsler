@@ -12,6 +12,13 @@ import { analyticsTools } from "./analytics-tools";
 import { enhancedTools } from "./enhanced-tools";
 import { MemorySaver } from "@langchain/langgraph";
 import { getPersistentCheckpointSaver } from "./persistent-checkpoint";
+import {
+  retryWithBackoff,
+  isRetryableError,
+  extractJSONFromText,
+  classifyError,
+  withErrorBoundary,
+} from "./error-recovery";
 
 /**
  * System prompt for the agent
@@ -124,6 +131,13 @@ export async function runLangGraphAgent(
   insights?: Insight[];
   toolResults?: ToolResult[];
   messages: BaseMessage[];
+  partial?: boolean;
+  error?: {
+    code: string;
+    retryable: boolean;
+    message?: string;
+    attemptNumber?: number;
+  };
 }> {
   try {
     console.log("[LangGraph Agent] Starting agent run...");
@@ -152,15 +166,20 @@ export async function runLangGraphAgent(
         }
       );
     } catch (invokeError: any) {
+      // Classify error for better handling
+      const errorContext = classifyError(invokeError);
+
+      console.error("[LangGraph Agent] Agent invocation error:", {
+        category: errorContext.category,
+        severity: errorContext.severity,
+        retryable: errorContext.retryable,
+        message: invokeError.message,
+        lc_error_code: invokeError?.lc_error_code,
+      });
+
       // Handle tool validation errors from Azure OpenAI
       if (invokeError?.message?.includes("tool_call_id") || invokeError?.lc_error_code === "INVALID_TOOL_RESULTS") {
-        console.error("[LangGraph Agent] Tool validation error:", {
-          message: invokeError.message,
-          lc_error_code: invokeError?.lc_error_code,
-          pregelTaskId: invokeError?.pregelTaskId,
-          attemptNumber: invokeError?.attemptNumber,
-          stack: invokeError.stack?.split('\n').slice(0, 3).join('\n'),
-        });
+        console.warn("[LangGraph Agent] Tool validation error detected - attempting recovery");
 
         // Try to extract any partial results
         const partialResponse = invokeError?.metadata?.messages?.find((m: any) => m._getType() === "ai")?.content;
@@ -170,16 +189,51 @@ export async function runLangGraphAgent(
           return {
             response: partialResponse,
             messages: [],
+            partial: true,
+          };
+        }
+
+        // If retryable and we have remaining attempts (detected from attemptNumber)
+        const attemptNumber = invokeError?.attemptNumber || 0;
+        if (errorContext.retryable && attemptNumber < 2) {
+          console.log("[LangGraph Agent] Error is retryable, suggesting user retry");
+          return {
+            response: errorContext.userMessage + " If this continues, please try a simpler question.",
+            messages: [],
+            error: {
+              code: "TOOL_VALIDATION_ERROR",
+              retryable: true,
+              attemptNumber,
+            },
           };
         }
 
         // Return a graceful error response
         return {
-          response: "I encountered an issue while processing your request. The database query tools may have had an error. Please try again or try a simpler query.",
+          response: errorContext.userMessage,
           messages: [],
+          error: {
+            code: "TOOL_VALIDATION_ERROR",
+            retryable: false,
+            message: errorContext.technicalMessage,
+          },
         };
       }
-      // Re-throw other errors
+
+      // For checkpoint conflicts, suggest retrying
+      if (invokeError?.message?.includes("checkpoint conflict") || invokeError?.message?.includes("lock")) {
+        console.warn("[LangGraph Agent] Checkpoint conflict detected");
+        return {
+          response: "The system is processing another request. Please try again in a moment.",
+          messages: [],
+          error: {
+            code: "CHECKPOINT_CONFLICT",
+            retryable: true,
+          },
+        };
+      }
+
+      // Re-throw non-recoverable errors
       throw invokeError;
     }
 
@@ -187,10 +241,12 @@ export async function runLangGraphAgent(
     // Find the last non-tool message (should be AI message with final response)
     let response = "";
     let lastAIMessage: any = null;
-    
+    let hasAIMessages = false;
+
     for (let i = result.messages.length - 1; i >= 0; i--) {
       const msg = result.messages[i];
       if (msg._getType() === "ai") {
+        hasAIMessages = true;
         lastAIMessage = msg;
         response = typeof msg.content === "string"
           ? msg.content
@@ -200,10 +256,28 @@ export async function runLangGraphAgent(
     }
 
     if (!response) {
-      response = "Agent completed but no response generated";
+      if (!hasAIMessages) {
+        console.warn("[LangGraph Agent] No AI messages found in response - possible tool execution failure");
+        console.log("[LangGraph Agent] Message types:", result.messages.map(m => m._getType()).join(", "));
+
+        // Check if there were tool messages without AI response
+        const hasToolMessages = result.messages.some(m => m._getType() === "tool");
+        if (hasToolMessages) {
+          response = "The agent encountered an issue processing tool results. Please try again with a simpler query.";
+        } else {
+          response = "The agent completed but did not generate a response. Please try rephrasing your question.";
+        }
+      } else {
+        response = "Agent completed but no response content generated";
+      }
     }
 
-    console.log("[LangGraph Agent] Agent run complete, response length:", response.length);
+    console.log("[LangGraph Agent] Agent run complete:", {
+      responseLength: response.length,
+      hasAIMessages,
+      totalMessages: result.messages.length,
+      messageTypes: result.messages.map(m => m._getType()),
+    });
 
     // Extract tool results if any
     const toolResults: ToolResult[] = [];
@@ -221,24 +295,26 @@ export async function runLangGraphAgent(
 
     console.log("[LangGraph Agent] Tool results found:", toolResults.length);
 
-    // Try to extract insights from tool results
+    // Try to extract insights from tool results using robust parsing
     let insights: Insight[] | undefined;
     const analyticsToolUsed = toolResults.some((r) =>
       ["calculate_statistics", "trend_analysis", "deadline_monitor", "generate_insights"].includes(r.toolName)
     );
 
     if (analyticsToolUsed) {
-      // Look for insights in the response or tool results
-      try {
-        const insightsMatch = response.match(/insights?:\s*(\[[\s\S]*?\])/i);
-        if (insightsMatch) {
-          insights = JSON.parse(insightsMatch[1]);
-          if (insights && Array.isArray(insights)) {
-            console.log("[LangGraph Agent] Extracted insights:", insights.length);
-          }
-        }
-      } catch (error) {
-        console.error("[LangGraph Agent] Failed to parse insights:", error);
+      // Use robust JSON extraction with multiple strategies
+      const extracted = extractJSONFromText(response, "insights");
+
+      if (extracted && Array.isArray(extracted)) {
+        insights = extracted;
+        console.log("[LangGraph Agent] Successfully extracted insights:", insights.length);
+      } else if (extracted) {
+        // Try to wrap single insight in array
+        insights = [extracted];
+        console.log("[LangGraph Agent] Wrapped single insight in array");
+      } else {
+        console.warn("[LangGraph Agent] Failed to extract insights from response despite analytics tool usage");
+        console.log("[LangGraph Agent] Response preview:", response.substring(0, 200));
       }
     }
 
@@ -385,27 +461,45 @@ export async function* streamLangGraphAgent(
         }
       }
     } catch (iterationError: any) {
-      // Handle errors during stream iteration
-      console.error("[LangGraph Agent] Error during stream iteration:", iterationError);
+      // Classify the error for better handling
+      const errorContext = classifyError(iterationError);
+
+      console.error("[LangGraph Agent] Error during stream iteration:", {
+        category: errorContext.category,
+        severity: errorContext.severity,
+        retryable: errorContext.retryable,
+        message: iterationError.message,
+      });
 
       // If we got a partial response, return it
       if (fullResponse) {
-        console.log("[LangGraph Agent] Returning partial response before error");
+        console.log("[LangGraph Agent] Returning partial response before error:", {
+          responseLength: fullResponse.length,
+          toolsUsed: toolResults.length,
+        });
         yield {
           type: "complete",
           content: {
             response: fullResponse,
             toolResults: toolResults.length > 0 ? toolResults : undefined,
             partial: true,
+            error: {
+              code: errorContext.category.toUpperCase(),
+              message: errorContext.userMessage,
+              retryable: errorContext.retryable,
+            },
           },
         };
       } else {
-        // No response yet, return error
+        // No response yet, return error with context
+        console.warn("[LangGraph Agent] Stream failed with no partial response");
         yield {
           type: "error",
           content: {
-            message: "Agent encountered an error during execution. Please try again.",
-            retryable: true,
+            message: errorContext.userMessage,
+            retryable: errorContext.retryable,
+            severity: errorContext.severity,
+            code: errorContext.category.toUpperCase(),
           },
         };
       }

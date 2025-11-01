@@ -9,6 +9,32 @@ import { z } from "zod";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { queryCache } from "@/lib/cache/query-cache";
 import { DEMO_USER_ID } from "@/lib/constants";
+import { retryWithBackoff, withErrorBoundary } from "./error-recovery";
+
+/**
+ * Wrapper for database queries with retry logic
+ */
+async function queryWithRetry<T>(
+  operation: () => Promise<T>,
+  context: string
+): Promise<T> {
+  const result = await retryWithBackoff(operation, {
+    maxAttempts: 2,
+    initialDelay: 500,
+    retryableErrors: ["timeout", "network", "connection"],
+  });
+
+  if (!result.success) {
+    console.error(`[Tool] ${context} failed after ${result.attempts} attempts`);
+    throw result.error!;
+  }
+
+  if (result.attempts > 1) {
+    console.log(`[Tool] ${context} succeeded after ${result.attempts} attempts`);
+  }
+
+  return result.data!;
+}
 
 // Tool 1: Get Students
 export const getStudentsTool = new DynamicStructuredTool({
