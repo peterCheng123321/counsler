@@ -12,6 +12,9 @@
 
 import { AIProvider } from './types';
 
+// Re-export AIProvider for use by other modules
+export type { AIProvider };
+
 // ============================================================================
 // Type Definitions
 // ============================================================================
