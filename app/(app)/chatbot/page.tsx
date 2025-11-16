@@ -935,6 +935,7 @@ function ChatbotContent() {
                             type: "essay",
                             essayId,
                             studentId: studentId || null,
+                            letterId: null,
                             isExpanded: false,
                           });
                         }}
@@ -943,6 +944,7 @@ function ChatbotContent() {
                             type: "student",
                             essayId: null,
                             studentId,
+                            letterId: null,
                             isExpanded: false,
                           });
                         }}
