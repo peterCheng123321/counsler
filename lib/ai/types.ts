@@ -69,3 +69,5 @@ export interface AIChatStreamChunk {
 
 export type AIServiceType = "openai" | "azure-openai" | "gemini" | "fallback";
 
+export type AIProvider = "openai" | "azure" | "gemini" | "anthropic";
+
