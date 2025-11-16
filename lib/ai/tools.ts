@@ -9,7 +9,7 @@ import { z } from "zod";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { queryCache } from "@/lib/cache/query-cache";
 import { DEMO_USER_ID } from "@/lib/constants";
-import { createLLM } from "./llm-factory";
+import { createLLM, createLLMForGeneration } from "./llm-factory";
 import {
   extractStudentName,
   extractCollegeInfo,
@@ -1412,8 +1412,12 @@ export const generateRecommendationLetterTool = new DynamicStructuredTool({
         });
       }
 
-      // Generate personalized letter using AI
-      const llm = createLLM({ temperature: 0.7, maxTokens: 1500 });
+      // Generate personalized letter using AI with high-reasoning model
+      const llm = createLLMForGeneration({
+        temperature: 0.7, // Higher for creative, personalized writing
+        maxTokens: 1500,
+        hasPII: true, // Student data is PII
+      });
 
       const prompt = `Generate a professional Letter of Recommendation for:
 
@@ -1442,8 +1446,52 @@ Format as a formal letter with proper structure.`;
           ? response.content
           : JSON.stringify(response.content);
 
+      // Save letter to database
+      const { data: savedLetter, error: saveError } = await supabase
+        .from("letters_of_recommendation")
+        .insert({
+          student_id: student.id,
+          counselor_id: student.counselor_id || "00000000-0000-0000-0000-000000000000", // Use default if not set
+          program_type: program || null,
+          generated_content: letterContent,
+          status: "draft",
+        })
+        .select()
+        .single();
+
+      if (saveError || !savedLetter) {
+        console.error("[Letter Generator] Error saving letter:", saveError);
+        // Still return the letter content even if save fails
+        return JSON.stringify({
+          success: true,
+          student: {
+            name: `${student.first_name} ${student.last_name}`,
+            email: student.email,
+            gpa: student.gpa,
+          },
+          letter: letterContent,
+          college: college_name,
+          program: program,
+          message: `Generated recommendation letter for ${student.first_name} ${student.last_name}${college_name ? ` for ${college_name}` : ""}. (Warning: Letter was not saved to database)`,
+        });
+      }
+
+      // Return with canvas marker to open in canvas
       return JSON.stringify({
         success: true,
+        __canvas__: {
+          type: "letter",
+          action: "open",
+          data: {
+            letter_id: savedLetter.id,
+            student_id: student.id,
+            student_name: `${student.first_name} ${student.last_name}`,
+            program_type: program,
+            word_count: letterContent.trim().split(/\s+/).filter(Boolean).length,
+            status: "draft",
+          }
+        },
+        letter_id: savedLetter.id,
         student: {
           name: `${student.first_name} ${student.last_name}`,
           email: student.email,
@@ -1452,7 +1500,7 @@ Format as a formal letter with proper structure.`;
         letter: letterContent,
         college: college_name,
         program: program,
-        message: `Generated recommendation letter for ${student.first_name} ${student.last_name}${college_name ? ` for ${college_name}` : ""}`,
+        message: `Generated recommendation letter for ${student.first_name} ${student.last_name}${college_name ? ` for ${college_name}` : ""}. Opening in canvas editor...`,
       });
     } catch (error) {
       console.error("[Letter Generator] Error:", error);

@@ -5,7 +5,7 @@
 
 import { createReactAgent } from "@langchain/langgraph/prebuilt";
 import { BaseMessage, HumanMessage, AIMessage, SystemMessage } from "@langchain/core/messages";
-import { createLLM } from "./llm-factory";
+import { createLLM, createLLMForChatbot } from "./llm-factory";
 import { langchainTools, enhancedTools } from "./tools";
 import { crudTools } from "./langchain-tools-crud";
 import { analyticsTools } from "./analytics-tools";
@@ -21,6 +21,8 @@ import {
   classifyError,
   withErrorBoundary,
 } from "./error-recovery";
+import { UserRole, AIMode } from "./tool-categories";
+import { filterTools, logFilteredTools } from "./tool-filter";
 
 /**
  * System prompt for the agent
@@ -98,17 +100,41 @@ export interface ToolResult {
 
 /**
  * Create the LangGraph agent with all tools
+ * Uses intelligent model routing for cost optimization and FERPA compliance
+ * NEW: Supports mode-based tool filtering
  */
-export function createLangGraphAgent(usePersistent: boolean = true) {
-  const llm = createLLM({
+export function createLangGraphAgent(
+  usePersistent: boolean = true,
+  role?: UserRole,
+  mode?: AIMode
+) {
+  // Use chatbot-optimized model with PII protection
+  const llm = createLLMForChatbot({
     temperature: 0.3, // Lower for more focused analytical responses
     maxTokens: 2000,
+    hasPII: true, // Autonomous agent handles student data
   });
 
-  // Combine all tools including enhanced capabilities, canvas, essay, and college tools
+  console.log("[LangGraph Agent] Using model router (FERPA-compliant)");
+
+  // Get all available tools
   const allTools = [...langchainTools, ...crudTools, ...analyticsTools, ...enhancedTools, ...canvasTools, ...essayTools, ...collegeTools];
 
-  console.log(`[LangGraph Agent] Creating agent with ${allTools.length} tools`);
+  // Apply tool filtering if role/mode provided
+  let tools: typeof allTools = allTools;
+  if (role) {
+    tools = filterTools(allTools, { role, mode }) as typeof allTools;
+
+    console.log(`[LangGraph Agent] Tool filtering enabled: ${role}${mode ? ` (${mode})` : ""}`);
+    console.log(`[LangGraph Agent] Filtered tools: ${tools.length}/${allTools.length}`);
+
+    // Log detailed filter stats in development
+    if (process.env.NODE_ENV === "development") {
+      logFilteredTools(allTools, { role, mode });
+    }
+  } else {
+    console.log(`[LangGraph Agent] Using all tools (${allTools.length}) - filtering disabled`);
+  }
 
   // Use persistent checkpoint saver for cross-session memory
   // Falls back to in-memory if persistent fails
@@ -128,7 +154,7 @@ export function createLangGraphAgent(usePersistent: boolean = true) {
   // Configure agent with error handling
   return createReactAgent({
     llm,
-    tools: allTools,
+    tools, // Use filtered tools (or all tools if filtering disabled)
     checkpointSaver: checkpointer,
     messageModifier: AGENT_SYSTEM_PROMPT,
   });
@@ -140,7 +166,9 @@ export function createLangGraphAgent(usePersistent: boolean = true) {
 export async function runLangGraphAgent(
   message: string,
   conversationHistory: BaseMessage[] = [],
-  threadId: string = "default"
+  threadId: string = "default",
+  role?: UserRole,
+  mode?: AIMode
 ): Promise<{
   response: string;
   insights?: Insight[];
@@ -157,7 +185,7 @@ export async function runLangGraphAgent(
   try {
     console.log("[LangGraph Agent] Starting agent run...");
 
-    const agent = createLangGraphAgent();
+    const agent = createLangGraphAgent(true, role, mode);
 
     // Prepare messages
     const messages = [
@@ -355,7 +383,9 @@ export async function runLangGraphAgent(
 export async function* streamLangGraphAgent(
   message: string,
   conversationHistory: BaseMessage[] = [],
-  threadId: string = "default"
+  threadId: string = "default",
+  role?: UserRole,
+  mode?: AIMode
 ): AsyncGenerator<{
   type: "token" | "tool" | "insight" | "complete" | "error";
   content: any;
@@ -363,7 +393,7 @@ export async function* streamLangGraphAgent(
   try {
     console.log("[LangGraph Agent] Starting streaming agent run...");
 
-    const agent = createLangGraphAgent();
+    const agent = createLangGraphAgent(true, role, mode);
 
     // Prepare messages
     const messages = [

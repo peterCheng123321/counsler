@@ -3,7 +3,7 @@
  * Generates actionable insights for college counselors using real AI analysis
  */
 
-import { createLLM } from "./llm-factory";
+import { createLLMForChatbot } from "./llm-factory";
 import { getStudentsTool, getTasksTool, getUpcomingDeadlinesTool } from "./tools";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -68,9 +68,13 @@ export async function generateInsightsForCounselor(
     // 2. Build context-rich prompt based on category
     const prompt = buildInsightPrompt(category, students, tasks, upcomingDeadlines, maxInsights);
 
-    // 3. Get LLM response
-    const llm = createLLM({ temperature, maxTokens: 2000 });
-    console.log("[Insight Generator] Calling LLM...");
+    // 3. Get LLM response with model router for analytics
+    const llm = createLLMForChatbot({
+      temperature,
+      maxTokens: 2000,
+      hasPII: true, // Analyzing student data
+    });
+    console.log("[Insight Generator] Calling LLM with model router (FERPA-compliant)...");
 
     const response = await llm.invoke(prompt);
     const content = typeof response.content === "string" ? response.content : JSON.stringify(response.content);

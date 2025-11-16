@@ -13,7 +13,17 @@ export async function GET(
 
     const { data: letter, error } = await supabase
       .from("letters_of_recommendation")
-      .select("*")
+      .select(`
+        *,
+        student:students (
+          first_name,
+          last_name,
+          email
+        ),
+        college:colleges!student_colleges(
+          name
+        )
+      `)
       .eq("id", letterId)
       .single();
 
@@ -35,7 +45,56 @@ export async function GET(
   }
 }
 
-// PUT - Update a letter
+// PATCH - Partially update a letter (preferred for edits)
+export async function PATCH(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string; letterId: string }> }
+) {
+  try {
+    const { letterId } = await params;
+    const body = await request.json();
+    const supabase = createAdminClient();
+
+    // Build update object with only provided fields
+    const updates: any = {
+      updated_at: new Date().toISOString(),
+    };
+
+    if (body.program_type !== undefined) updates.program_type = body.program_type;
+    if (body.relationship_type !== undefined) updates.relationship_type = body.relationship_type;
+    if (body.relationship_duration !== undefined) updates.relationship_duration = body.relationship_duration;
+    if (body.relationship_context !== undefined) updates.relationship_context = body.relationship_context;
+    if (body.specific_examples !== undefined) updates.specific_examples = body.specific_examples;
+    if (body.generated_content !== undefined) updates.generated_content = body.generated_content;
+    if (body.status !== undefined) updates.status = body.status;
+
+    // Update the letter
+    const { data: letter, error: updateError } = await supabase
+      .from("letters_of_recommendation")
+      .update(updates)
+      .eq("id", letterId)
+      .select()
+      .single();
+
+    if (updateError) {
+      console.error("Error updating letter:", updateError);
+      return NextResponse.json(
+        { error: "Failed to update letter", details: updateError.message },
+        { status: 500 }
+      );
+    }
+
+    return NextResponse.json({ data: letter, success: true });
+  } catch (error: any) {
+    console.error("Error in PATCH /api/v1/students/[id]/letters/[letterId]:", error);
+    return NextResponse.json(
+      { error: "Internal server error", details: error.message },
+      { status: 500 }
+    );
+  }
+}
+
+// PUT - Update a letter (full replacement)
 export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ id: string; letterId: string }> }

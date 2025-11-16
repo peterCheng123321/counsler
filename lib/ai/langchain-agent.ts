@@ -9,7 +9,15 @@ import { crudTools } from "./langchain-tools-crud";
 import { canvasTools } from "./canvas-tools";
 import { essayTools } from "./essay-tools";
 import { collegeTools } from "./college-tools";
-import { createLLM, getActiveProviderInfo, type AIProvider, type LLMConfig } from "./llm-factory";
+import {
+  createLLM,
+  createLLMForChatbot,
+  getActiveProviderInfo,
+  type AIProvider,
+  type LLMConfig
+} from "./llm-factory";
+import { UserRole, AIMode } from "./tool-categories";
+import { filterTools, logFilteredTools } from "./tool-filter";
 
 const SYSTEM_PROMPT = `AI assistant for college application management (CAMP). Help counselors manage students, tasks, and deadlines.
 
@@ -51,6 +59,10 @@ const SYSTEM_PROMPT = `AI assistant for college application management (CAMP). H
 export interface LangChainAgentConfig extends LLMConfig {
   onToken?: (token: string) => void;
   onToolCall?: (toolName: string) => void;
+  // NEW: Mode-based filtering
+  role?: UserRole;
+  mode?: AIMode;
+  enableToolFiltering?: boolean; // Default: false for backward compatibility
 }
 
 /**
@@ -88,15 +100,42 @@ export async function runLangChainAgent(
 ) {
   const agentStart = Date.now();
 
-  // Log active provider info
-  const providerInfo = getActiveProviderInfo(config);
-  console.log(`[LangChain Agent] Using provider: ${providerInfo.provider} (${providerInfo.model})`);
+  // Use intelligent model routing for chatbot conversations
+  // Assumes PII (student data discussions) for safety - FERPA compliant
+  const llm = createLLMForChatbot({
+    ...config,
+    hasPII: true, // Chatbot conversations typically involve student data
+  });
 
-  const llm = createLLM(config);
+  console.log(`[LangChain Agent] Using model router for chatbot (FERPA-compliant)`);
 
-  // Bind all tools to the LLM
+  // Get all available tools
   const allTools = [...langchainTools, ...crudTools, ...enhancedTools, ...canvasTools, ...essayTools, ...collegeTools];
-  const llmWithTools = llm.bindTools(allTools);
+
+  // Apply tool filtering if enabled (NEW: mode-based filtering)
+  let tools: typeof allTools = allTools;
+  if (config.enableToolFiltering && config.role) {
+    tools = filterTools(allTools, {
+      role: config.role,
+      mode: config.mode,
+    }) as typeof allTools;
+
+    console.log(`[LangChain Agent] Tool filtering enabled: ${config.role}${config.mode ? ` (${config.mode})` : ""}`);
+    console.log(`[LangChain Agent] Filtered tools: ${tools.length}/${allTools.length}`);
+
+    // Log detailed filter stats in development
+    if (process.env.NODE_ENV === "development") {
+      logFilteredTools(allTools, {
+        role: config.role,
+        mode: config.mode,
+      });
+    }
+  } else {
+    console.log(`[LangChain Agent] Using all tools (${allTools.length}) - filtering disabled`);
+  }
+
+  // Bind tools to the LLM
+  const llmWithTools = llm.bindTools(tools);
 
   // Extract the last user message
   const lastMessage = messages[messages.length - 1];
@@ -272,11 +311,14 @@ export async function langChainChat(
   chatHistory: BaseMessage[] = [],
   config: LangChainAgentConfig = {}
 ) {
-  // Log active provider info
-  const providerInfo = getActiveProviderInfo(config);
-  console.log(`[LangChain Chat] Using provider: ${providerInfo.provider} (${providerInfo.model})`);
+  // Use intelligent model routing for chatbot conversations
+  const llm = createLLMForChatbot({
+    ...config,
+    hasPII: true, // Assume PII for safety
+    streaming: false,
+  });
 
-  const llm = createLLM({ ...config, streaming: false });
+  console.log(`[LangChain Chat] Using model router for chatbot (FERPA-compliant)`);
 
   const messages = [
     new SystemMessage(SYSTEM_PROMPT),

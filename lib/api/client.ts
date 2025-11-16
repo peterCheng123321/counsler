@@ -200,7 +200,14 @@ export class ApiClient {
     }>(`/chatbot/conversations/${id}`);
   }
 
-  async sendChatMessage(data: { conversationId?: string; message: string; stream?: boolean; agentMode?: "langchain" | "langgraph" }) {
+  async sendChatMessage(data: {
+    conversationId?: string;
+    message: string;
+    stream?: boolean;
+    agentMode?: "langchain" | "langgraph";
+    role?: string;
+    mode?: string;
+  }) {
     if (data.stream !== false) {
       // Streaming response
       const response = await fetch(`${API_BASE_URL}/chatbot/chat`, {
@@ -214,6 +221,8 @@ export class ApiClient {
           message: data.message,
           stream: true,
           agentMode: data.agentMode || "langgraph", // Default to LangGraph agent
+          role: data.role,
+          mode: data.mode,
         }),
       });
 
@@ -241,6 +250,8 @@ export class ApiClient {
           message: data.message,
           stream: false,
           agentMode: data.agentMode || "langgraph", // Default to LangGraph agent
+          role: data.role,
+          mode: data.mode,
         }),
       });
 

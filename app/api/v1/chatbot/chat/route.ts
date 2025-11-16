@@ -12,6 +12,8 @@ const chatMessageSchema = z.object({
   message: z.string().min(1).max(10000),
   stream: z.boolean().optional().default(false),
   agentMode: z.enum(["langchain", "langgraph"]).optional().default("langgraph"), // Default to new LangGraph agent
+  role: z.enum(["counselor", "student", "admin"]).optional().default("counselor"),
+  mode: z.enum(["counselor_copilot", "student_advisor", "admin_analytics", "canvas_editor", "research_assistant"]).optional(),
   studentContext: z.object({
     id: z.string(),
     name: z.string(),
@@ -79,7 +81,7 @@ export async function POST(request: NextRequest) {
     const userId = DEMO_USER_ID;
 
     const body = await request.json();
-    const { conversationId, message: rawMessage, stream, agentMode, studentContext } = chatMessageSchema.parse(body);
+    const { conversationId, message: rawMessage, stream, agentMode, role, mode, studentContext } = chatMessageSchema.parse(body);
 
     // Sanitize the message to prevent injection attacks
     let message = sanitizeMessage(rawMessage);
@@ -183,7 +185,9 @@ export async function POST(request: NextRequest) {
               const streamGen = streamLangGraphAgent(
                 message,
                 baseMessages.slice(0, -1), // Exclude the last message (current user message)
-                convId
+                convId,
+                role,
+                mode
               );
 
               for await (const event of streamGen) {
@@ -268,6 +272,9 @@ export async function POST(request: NextRequest) {
                 temperature: 0.7,
                 maxTokens: 2000,
                 streaming: true,
+                role,
+                mode,
+                enableToolFiltering: true,
                 onToken: async (token) => {
                   fullContent += token;
                   await sendSSEChunk(controller, {
@@ -396,7 +403,9 @@ export async function POST(request: NextRequest) {
           const result = await runLangGraphAgent(
             message,
             baseMessages.slice(0, -1),
-            convId
+            convId,
+            role,
+            mode
           );
 
           finalContent = result.response;
@@ -413,6 +422,9 @@ export async function POST(request: NextRequest) {
           const result = await runLangChainAgent(messages, {
             temperature: 0.7,
             maxTokens: 2000,
+            role,
+            mode,
+            enableToolFiltering: true,
           });
 
           finalContent = result.content;

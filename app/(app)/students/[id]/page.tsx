@@ -99,13 +99,14 @@ export default function StudentDetailPage({
     }
   }, [input]);
 
-  const handleSendMessage = async () => {
-    if (!input.trim() || isTyping) return;
+  const handleSendMessage = async (messageText?: string) => {
+    const messageToSend = messageText || input.trim();
+    if (!messageToSend || isTyping) return;
 
     const userMessage: Message = {
       id: Date.now().toString(),
       role: "user",
-      content: input.trim(),
+      content: messageToSend,
       timestamp: new Date(),
     };
 
@@ -119,7 +120,7 @@ export default function StudentDetailPage({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          message: input.trim(),
+          message: messageToSend,
           stream: false,  // Simplified: no streaming for now
           studentContext: {
             id: id,
@@ -381,40 +382,28 @@ export default function StudentDetailPage({
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => {
-                        setInput("What are the upcoming deadlines?");
-                        handleSendMessage();
-                      }}
+                      onClick={() => handleSendMessage("What are the upcoming deadlines?")}
                     >
                       Deadlines
                     </Button>
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => {
-                        setInput("Show application progress");
-                        handleSendMessage();
-                      }}
+                      onClick={() => handleSendMessage("Show application progress")}
                     >
                       Progress
                     </Button>
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => {
-                        setInput("What's the essay status?");
-                        handleSendMessage();
-                      }}
+                      onClick={() => handleSendMessage("What's the essay status?")}
                     >
                       Essays
                     </Button>
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => {
-                        setInput("Recommend colleges for this student");
-                        handleSendMessage();
-                      }}
+                      onClick={() => handleSendMessage("Recommend colleges for this student")}
                     >
                       College Recs
                     </Button>

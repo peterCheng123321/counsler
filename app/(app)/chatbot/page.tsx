@@ -21,9 +21,12 @@ import { ToolsHelpPanel } from "@/components/chatbot/tools-help-panel";
 import { SmartSuggestions } from "@/components/chatbot/smart-suggestions";
 import { EssayCanvas } from "@/components/chatbot/essay-canvas";
 import { StudentCanvas } from "@/components/chatbot/student-canvas";
+import { LetterCanvas } from "@/components/chatbot/letter-canvas";
 import { AIConfirmationDialog } from "@/components/ai/ai-confirmation-dialog";
+import { ModeSelector } from "@/components/chatbot/mode-selector";
 import { apiClient, type Message as APIMessage } from "@/lib/api/client";
 import type { AIAction } from "@/lib/contexts/ai-context";
+import type { AIMode, UserRole } from "@/lib/ai/tool-categories";
 import { toast } from "sonner";
 
 interface Insight {
@@ -90,6 +93,8 @@ function ChatbotContent() {
   const [showConfirmation, setShowConfirmation] = useState(false);
   const [confirmationMessage, setConfirmationMessage] = useState<string>("");
   const [agentMode, setAgentMode] = useState<"langchain" | "langgraph">("langgraph");
+  const [selectedMode, setSelectedMode] = useState<AIMode>("counselor_copilot");
+  const [userRole, setUserRole] = useState<UserRole>("counselor"); // TODO: Get from auth context
   const [attachedImages, setAttachedImages] = useState<Array<{ url: string; file: File }>>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [isFocused, setIsFocused] = useState(false);
@@ -115,9 +120,10 @@ function ChatbotContent() {
   });
   // Canvas state - persisted in sessionStorage
   const [canvasData, setCanvasData] = useState<{
-    type: "essay" | "student" | null;
+    type: "essay" | "student" | "letter" | null;
     essayId: string | null;
     studentId: string | null;
+    letterId: string | null;
     isExpanded: boolean;
   }>(() => {
     // Restore canvas state from sessionStorage on mount
@@ -127,11 +133,11 @@ function ChatbotContent() {
         try {
           return JSON.parse(saved);
         } catch (e) {
-          return { type: null, essayId: null, studentId: null, isExpanded: false };
+          return { type: null, essayId: null, studentId: null, letterId: null, isExpanded: false };
         }
       }
     }
-    return { type: null, essayId: null, studentId: null, isExpanded: false };
+    return { type: null, essayId: null, studentId: null, letterId: null, isExpanded: false };
   });
 
   // Persist canvas state to sessionStorage whenever it changes
@@ -174,6 +180,7 @@ function ChatbotContent() {
         type: null,
         essayId: null,
         studentId: null,
+        letterId: null,
         isExpanded: false,
       });
       // Optionally close the canvas sidebar
@@ -293,6 +300,8 @@ function ChatbotContent() {
         message: messageContent,
         stream: true,
         agentMode: agentMode,
+        role: userRole,
+        mode: selectedMode,
       });
 
       if (response.stream && response.success) {
@@ -350,6 +359,7 @@ function ChatbotContent() {
                           type: "essay",
                           essayId: args.essay_id,
                           studentId: args.student_id || null,
+                          letterId: null,
                           isExpanded: false,
                         });
                         description = `Opening essay in canvas`;
@@ -360,10 +370,25 @@ function ChatbotContent() {
                           type: "student",
                           essayId: null,
                           studentId: args.student_id,
+                          letterId: null,
                           isExpanded: false,
                         });
                         description = `Opening student profile in canvas`;
                         toast.success("Opening student profile...");
+                      } else if (toolName === "open_letter_canvas" && (args.letter_id || args.student_id)) {
+                        console.log("[Canvas] Opening letter canvas:", args);
+                        setCanvasData({
+                          type: "letter",
+                          essayId: null,
+                          studentId: args.student_id || null,
+                          letterId: args.letter_id || null,
+                          isExpanded: false,
+                        });
+                        description = `Opening letter of recommendation in canvas`;
+                        toast.success("Opening letter in editor...");
+                      } else if (toolName === "generate_recommendation_letter") {
+                        // Letter generation will auto-open in canvas via the __canvas__ marker in the response
+                        description = `Generating letter of recommendation`;
                       }
                       // Generate context-aware descriptions for other tools
                       else if (toolName === "get_students" && args.filters) {
@@ -436,6 +461,51 @@ function ChatbotContent() {
                       prev.map((msg) => {
                         if (msg.id === aiMessageId) {
                           let cleanedContent = msg.content || "";
+
+                          // Check if content contains __canvas__ marker (for auto-opening canvases)
+                          try {
+                            // Look for __canvas__ marker in the response
+                            const canvasMatch = cleanedContent.match(/"__canvas__":\s*{([^}]+)}/);
+                            if (canvasMatch) {
+                              try {
+                                const canvasData = JSON.parse(`{${canvasMatch[1]}}`);
+                                console.log("[Canvas] Found canvas marker:", canvasData);
+
+                                if (canvasData.type === "letter" && canvasData.data) {
+                                  setCanvasData({
+                                    type: "letter",
+                                    essayId: null,
+                                    studentId: canvasData.data.student_id || null,
+                                    letterId: canvasData.data.letter_id || null,
+                                    isExpanded: false,
+                                  });
+                                  toast.success("Opening letter in canvas...");
+                                } else if (canvasData.type === "essay" && canvasData.data) {
+                                  setCanvasData({
+                                    type: "essay",
+                                    essayId: canvasData.data.essay_id || null,
+                                    studentId: canvasData.data.student_id || null,
+                                    letterId: null,
+                                    isExpanded: false,
+                                  });
+                                  toast.success("Opening essay in canvas...");
+                                } else if (canvasData.type === "student" && canvasData.data) {
+                                  setCanvasData({
+                                    type: "student",
+                                    essayId: null,
+                                    studentId: canvasData.data.student_id || null,
+                                    letterId: null,
+                                    isExpanded: false,
+                                  });
+                                  toast.success("Opening student profile...");
+                                }
+                              } catch (parseError) {
+                                console.error("[Canvas] Error parsing canvas data:", parseError);
+                              }
+                            }
+                          } catch (e) {
+                            console.error("Error checking for canvas marker:", e);
+                          }
 
                           // Check if content contains pending_confirmation action
                           try {
@@ -641,6 +711,7 @@ function ChatbotContent() {
       type: null,
       essayId: null,
       studentId: null,
+      letterId: null,
       isExpanded: false,
     });
   };
@@ -968,6 +1039,16 @@ function ChatbotContent() {
                   className="hidden"
                 />
 
+                {/* Mode Selector - Compact */}
+                <div className="shrink-0">
+                  <ModeSelector
+                    selectedMode={selectedMode}
+                    userRole={userRole}
+                    onModeChange={setSelectedMode}
+                    compact={true}
+                  />
+                </div>
+
                 {/* Attachment Button - Redesigned */}
                 <Button
                   variant="ghost"
@@ -1090,7 +1171,7 @@ function ChatbotContent() {
                   essayId={canvasData.essayId}
                   studentId={canvasData.studentId || undefined}
                   onClose={() =>
-                    setCanvasData({ type: null, essayId: null, studentId: null, isExpanded: false })
+                    setCanvasData({ type: null, essayId: null, studentId: null, letterId: null, isExpanded: false })
                   }
                   isExpanded={false}
                   onToggleExpand={() =>
@@ -1101,7 +1182,19 @@ function ChatbotContent() {
                 <StudentCanvas
                   studentId={canvasData.studentId}
                   onClose={() =>
-                    setCanvasData({ type: null, essayId: null, studentId: null, isExpanded: false })
+                    setCanvasData({ type: null, essayId: null, studentId: null, letterId: null, isExpanded: false })
+                  }
+                  isExpanded={false}
+                  onToggleExpand={() =>
+                    setCanvasData((prev) => ({ ...prev, isExpanded: true }))
+                  }
+                />
+              ) : canvasData.type === "letter" && canvasData.letterId && canvasData.studentId ? (
+                <LetterCanvas
+                  letterId={canvasData.letterId}
+                  studentId={canvasData.studentId}
+                  onClose={() =>
+                    setCanvasData({ type: null, essayId: null, studentId: null, letterId: null, isExpanded: false })
                   }
                   isExpanded={false}
                   onToggleExpand={() =>

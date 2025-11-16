@@ -1,4 +1,4 @@
-import { createLLM } from "./llm-factory";
+import { createLLMForGeneration } from "./llm-factory";
 
 interface LORGenerationParams {
   student: any;
@@ -58,7 +58,11 @@ The letter should be approximately 400-600 words, written in a professional yet 
 **Important:** Write the complete letter ready to be sent. Include proper salutation ("To Whom It May Concern:" or "Dear Admissions Committee:") and closing ("Sincerely,").`;
 
   try {
-    const llm = createLLM();
+    // Use high-reasoning model with FERPA compliance for LOR generation
+    const llm = createLLMForGeneration({
+      hasPII: true, // Student data is PII
+      temperature: 0.7, // Higher for creative writing
+    });
     const response = await llm.invoke(prompt);
 
     let content = "";

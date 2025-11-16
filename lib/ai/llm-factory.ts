@@ -1,18 +1,26 @@
 /**
  * LLM Factory - Centralized AI Model Creation
  * Supports multiple AI providers with automatic fallback
+ * Now with intelligent model routing for cost optimization and FERPA compliance
  */
 
 import { ChatOpenAI, AzureChatOpenAI } from "@langchain/openai";
 import { ChatGoogleGenerativeAI } from "@langchain/google-genai";
+import {
+  selectOptimalModel,
+  ModelSelectionContext,
+  type AIProvider
+} from "./model-router";
 
-export type AIProvider = "azure" | "openai" | "gemini";
+export type { AIProvider };
 
 export interface LLMConfig {
   temperature?: number;
   maxTokens?: number;
   streaming?: boolean;
   preferredProvider?: AIProvider;
+  // NEW: Task context for intelligent model routing
+  context?: ModelSelectionContext;
 }
 
 export interface AIProviderStatus {
@@ -112,14 +120,15 @@ function createAzureOpenAI(config: LLMConfig): AzureChatOpenAI {
 /**
  * Create OpenAI instance
  */
-function createOpenAI(config: LLMConfig): ChatOpenAI {
-  console.log("[LLM Factory] Creating OpenAI instance");
+function createOpenAI(config: LLMConfig, modelName?: string): ChatOpenAI {
+  const effectiveModel = modelName || process.env.OPENAI_MODEL || "gpt-4o-mini";
+  console.log(`[LLM Factory] Creating OpenAI instance (${effectiveModel})`);
 
   const { temperature = 0.7, maxTokens = 2000, streaming = false } = config;
 
   return new ChatOpenAI({
     openAIApiKey: process.env.OPENAI_API_KEY!,
-    modelName: process.env.OPENAI_MODEL || "gpt-4o-mini",
+    modelName: effectiveModel,
     temperature,
     maxTokens,
     streaming,
@@ -145,10 +154,34 @@ function createGemini(config: LLMConfig): ChatGoogleGenerativeAI {
 
 /**
  * Create LLM with automatic provider selection and fallback
+ * NEW: Supports intelligent model routing based on task context
  */
 export function createLLM(config: LLMConfig = {}): ChatOpenAI | AzureChatOpenAI | ChatGoogleGenerativeAI {
   const availableProviders = getAvailableProviders();
-  const preferredProvider = getPreferredProvider(config);
+  let preferredProvider = getPreferredProvider(config);
+
+  // NEW: Intelligent Model Routing
+  let modelName: string | undefined;
+  let routedConfig = { ...config };
+
+  if (config.context) {
+    console.log("[LLM Factory] Using intelligent model routing");
+    const optimalModel = selectOptimalModel(config.context);
+
+    // Override provider and model based on router decision
+    preferredProvider = optimalModel.provider;
+    modelName = optimalModel.modelName;
+
+    // Apply tier-specific temperature and token settings
+    routedConfig.temperature = config.temperature ?? optimalModel.temperature;
+    routedConfig.maxTokens = config.maxTokens ?? optimalModel.maxTokens;
+    routedConfig.preferredProvider = optimalModel.provider;
+
+    console.log(
+      `[LLM Factory] Router selected: ${optimalModel.provider}/${optimalModel.modelName}`,
+      `(tier: ${optimalModel.tier}, cost: $${optimalModel.estimatedCost}, FERPA: ${optimalModel.isFERPACompliant})`
+    );
+  }
 
   // Log available providers
   console.log("[LLM Factory] Available providers:",
@@ -169,11 +202,11 @@ export function createLLM(config: LLMConfig = {}): ChatOpenAI | AzureChatOpenAI 
       try {
         switch (preferredProvider) {
           case "azure":
-            return createAzureOpenAI(config);
+            return createAzureOpenAI(routedConfig);
           case "openai":
-            return createOpenAI(config);
+            return createOpenAI(routedConfig, modelName);
           case "gemini":
-            return createGemini(config);
+            return createGemini(routedConfig);
         }
       } catch (error) {
         console.warn(`[LLM Factory] Failed to create ${preferredProvider}:`, error);
@@ -199,11 +232,11 @@ export function createLLM(config: LLMConfig = {}): ChatOpenAI | AzureChatOpenAI 
       try {
         switch (provider) {
           case "azure":
-            return createAzureOpenAI(config);
+            return createAzureOpenAI(routedConfig);
           case "openai":
-            return createOpenAI(config);
+            return createOpenAI(routedConfig, modelName);
           case "gemini":
-            return createGemini(config);
+            return createGemini(routedConfig);
         }
       } catch (error) {
         console.warn(`[LLM Factory] Failed to create ${provider}:`, error);
@@ -268,4 +301,79 @@ export function getActiveProviderInfo(config: LLMConfig = {}): {
   }
 
   return { provider: activeProvider, model };
+}
+
+// ============================================================================
+// Convenience Functions for Model Router Integration
+// ============================================================================
+
+/**
+ * Create LLM optimized for a specific tool
+ * Automatically routes to the appropriate model tier
+ */
+export function createLLMForTool(
+  toolName: string,
+  config: Omit<LLMConfig, 'context'> = {}
+): ChatOpenAI | AzureChatOpenAI | ChatGoogleGenerativeAI {
+  return createLLM({
+    ...config,
+    context: { toolName },
+  });
+}
+
+/**
+ * Create LLM for chatbot conversations
+ * Uses large-context tier with PII protection
+ */
+export function createLLMForChatbot(
+  config: Omit<LLMConfig, 'context'> & { hasPII?: boolean } = {}
+): ChatOpenAI | AzureChatOpenAI | ChatGoogleGenerativeAI {
+  const { hasPII = true, ...llmConfig } = config;
+
+  return createLLM({
+    ...llmConfig,
+    context: {
+      taskType: 'interactive',
+      complexity: 'moderate',
+      hasPII,
+      requiresLargeContext: true,
+    },
+  });
+}
+
+/**
+ * Create LLM for generation tasks (LOR, essays, etc.)
+ * Uses high-reasoning tier with FERPA compliance
+ */
+export function createLLMForGeneration(
+  config: Omit<LLMConfig, 'context'> & { hasPII?: boolean } = {}
+): ChatOpenAI | AzureChatOpenAI | ChatGoogleGenerativeAI {
+  const { hasPII = true, ...llmConfig } = config;
+
+  return createLLM({
+    ...llmConfig,
+    context: {
+      taskType: 'generation',
+      complexity: 'complex',
+      hasPII,
+      requiresReasoning: true,
+    },
+  });
+}
+
+/**
+ * Create LLM for simple queries
+ * Uses fast-cheap tier for cost optimization
+ */
+export function createLLMForQuery(
+  config: Omit<LLMConfig, 'context'> = {}
+): ChatOpenAI | AzureChatOpenAI | ChatGoogleGenerativeAI {
+  return createLLM({
+    ...config,
+    context: {
+      taskType: 'query',
+      complexity: 'simple',
+      hasPII: false,
+    },
+  });
 }

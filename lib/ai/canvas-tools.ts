@@ -353,10 +353,149 @@ export const openStudentCanvasTool = new DynamicStructuredTool({
   },
 });
 
+/**
+ * Tool to open a letter of recommendation in the canvas
+ */
+export const openLetterCanvasTool = new DynamicStructuredTool({
+  name: "open_letter_canvas",
+  description: `Open a letter of recommendation in an interactive canvas within the chat interface.
+  Use this when the user wants to view, read, or edit a letter of recommendation.
+  The canvas will display the letter content with editing capabilities.
+
+  **IMPORTANT**: You MUST have either letter_id OR student_id before calling this tool.
+  If you don't have the letter_id, use student_id to get their most recent letter.
+
+  Examples of when to use:
+  - "Show me the letter of recommendation"
+  - "Open the LOR for this student"
+  - "Let me view the recommendation letter"
+  - "I want to edit the letter"
+
+  This displays the full letter with editing and save capabilities.`,
+
+  schema: z.object({
+    letter_id: z.string().uuid().optional().describe("The UUID of the letter to open"),
+    student_id: z.string().uuid().optional().describe("Student ID to find their most recent letter"),
+    student_name: z.string().optional().describe("Student name to search for (will find student first)"),
+  }),
+
+  func: async ({ letter_id, student_id, student_name }) => {
+    try {
+      const supabase = createAdminClient();
+      let letter: any = null;
+      let resolvedStudentId = student_id;
+
+      // If student_name provided, find student first
+      if (student_name && !resolvedStudentId) {
+        const { data: students } = await supabase
+          .from("students")
+          .select("id, first_name, last_name")
+          .or(`first_name.ilike.%${student_name}%,last_name.ilike.%${student_name}%`)
+          .limit(5);
+
+        if (students && students.length === 1) {
+          resolvedStudentId = students[0].id;
+        } else if (students && students.length > 1) {
+          return JSON.stringify({
+            success: false,
+            multiple_matches: true,
+            students: students.map((s) => ({
+              id: s.id,
+              name: `${s.first_name} ${s.last_name}`,
+            })),
+            message: "Multiple students found. Please be more specific or use student_id.",
+          });
+        } else {
+          return JSON.stringify({
+            success: false,
+            error: `No student found with name "${student_name}"`,
+          });
+        }
+      }
+
+      // Fetch letter
+      if (letter_id) {
+        const { data } = await supabase
+          .from("letters_of_recommendation")
+          .select(`
+            *,
+            student:students (
+              first_name,
+              last_name,
+              email
+            )
+          `)
+          .eq("id", letter_id)
+          .single();
+        letter = data;
+      } else if (resolvedStudentId) {
+        // Get most recent letter for student
+        const { data } = await supabase
+          .from("letters_of_recommendation")
+          .select(`
+            *,
+            student:students (
+              first_name,
+              last_name,
+              email
+            )
+          `)
+          .eq("student_id", resolvedStudentId)
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .single();
+        letter = data;
+      }
+
+      if (!letter) {
+        return JSON.stringify({
+          success: false,
+          error: "No letter found",
+          message: letter_id
+            ? "Letter not found with the provided ID"
+            : "No letters found for this student. Use generate_recommendation_letter to create one first.",
+        });
+      }
+
+      // Calculate word count
+      const wordCount = letter.generated_content
+        ? letter.generated_content.trim().split(/\s+/).filter(Boolean).length
+        : 0;
+
+      // Return success with special canvas marker
+      return JSON.stringify({
+        success: true,
+        __canvas__: {
+          type: "letter",
+          action: "open",
+          data: {
+            letter_id: letter.id,
+            student_id: letter.student_id,
+            student_name: letter.student
+              ? `${letter.student.first_name} ${letter.student.last_name}`
+              : "Unknown",
+            program_type: letter.program_type,
+            word_count: wordCount,
+            status: letter.status,
+          }
+        },
+        message: `Opening letter of recommendation${letter.student ? ` for ${letter.student.first_name} ${letter.student.last_name}` : ""} in the canvas editor.`,
+      });
+    } catch (error) {
+      console.error("[Canvas Tool] Error opening letter:", error);
+      return JSON.stringify({
+        success: false,
+        error: error instanceof Error ? error.message : "Failed to open letter",
+      });
+    }
+  },
+});
+
 // Export all canvas tools
 export const canvasTools = [
   openEssayCanvasTool,
   searchEssaysTool,
   updateEssayContentTool,
   openStudentCanvasTool,
+  openLetterCanvasTool,
 ];

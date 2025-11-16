@@ -6,7 +6,7 @@
 import { DynamicStructuredTool } from "@langchain/core/tools";
 import { z } from "zod";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { createLLM } from "./llm-factory";
+import { createLLMForGeneration } from "./llm-factory";
 
 // ============================================================================
 // ESSAY QUERY TOOLS
@@ -391,11 +391,12 @@ export const aiEssaySuggestionsTool = new DynamicStructuredTool({
   "next_steps": ["actionable next step 1", "actionable next step 2"]
 }`;
 
-      // Call LLM
+      // Call LLM with model router for high-quality essay analysis
       console.log("[Essay AI] Generating suggestions for essay:", essay_id);
-      const llm = createLLM({
+      const llm = createLLMForGeneration({
         temperature: 0.3, // Lower temperature for more focused feedback
         maxTokens: 2000,
+        hasPII: true, // Essay content is student PII
       });
 
       const response = await llm.invoke(prompt);
