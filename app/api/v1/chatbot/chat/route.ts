@@ -84,21 +84,19 @@ export async function POST(request: NextRequest) {
     const { conversationId, message: rawMessage, stream, agentMode, role, mode, studentContext } = chatMessageSchema.parse(body);
 
     // Sanitize the message to prevent injection attacks
-    let message = sanitizeMessage(rawMessage);
+    const message = sanitizeMessage(rawMessage);
 
-    // If we have student context, enhance the message with structured context
+    // Create student context system message (if provided)
+    // This will be added to the agent but NOT saved to the database
+    let studentContextMessage = null;
     if (studentContext) {
-      // Create a context-enhanced message that the AI will understand better
-      const contextPrefix = `[Context: You are helping a counselor who is currently viewing ${studentContext.name}'s profile. ` +
+      studentContextMessage = `You are helping a counselor who is currently viewing ${studentContext.name}'s profile. ` +
         `Student details - GPA: ${studentContext.gpa || 'Not provided'}, ` +
         `SAT: ${studentContext.sat || 'Not provided'}, ` +
         `ACT: ${studentContext.act || 'Not provided'}, ` +
         `Graduation Year: ${studentContext.graduationYear || 'Not provided'}, ` +
         `Progress: ${studentContext.progress || 0}%. ` +
-        `All questions refer to this specific student unless stated otherwise.]\n\n` +
-        `Question about ${studentContext.name}: ${message}`;
-
-      message = contextPrefix;
+        `All questions refer to ${studentContext.name} unless stated otherwise.`;
     }
 
     // Get or create conversation
@@ -123,7 +121,7 @@ export async function POST(request: NextRequest) {
       convId = newConv.id;
     }
 
-    // Save user message
+    // Save ONLY the user's original message (not the context)
     const { error: userMsgError } = await supabase
       .from("messages")
       .insert({
@@ -172,7 +170,7 @@ export async function POST(request: NextRequest) {
               console.log("Running LangGraph agent with streaming...");
 
               // Convert messages to BaseMessage format for LangGraph
-              const { HumanMessage, AIMessage } = await import("@langchain/core/messages");
+              const { HumanMessage, AIMessage, SystemMessage } = await import("@langchain/core/messages");
               const baseMessages = messages.map((msg) => {
                 if (msg.role === "user") {
                   return new HumanMessage(msg.content);
@@ -181,10 +179,15 @@ export async function POST(request: NextRequest) {
                 }
               });
 
+              // Add student context as system message (if provided)
+              const messagesWithContext = studentContextMessage
+                ? [new SystemMessage(studentContextMessage), ...baseMessages.slice(0, -1)]
+                : baseMessages.slice(0, -1);
+
               // Stream the LangGraph agent
               const streamGen = streamLangGraphAgent(
                 message,
-                baseMessages.slice(0, -1), // Exclude the last message (current user message)
+                messagesWithContext, // Now includes system message with context if available
                 convId,
                 role,
                 mode
@@ -391,7 +394,7 @@ export async function POST(request: NextRequest) {
           console.log("Running LangGraph agent (non-streaming)...");
 
           // Convert messages to BaseMessage format
-          const { HumanMessage, AIMessage } = await import("@langchain/core/messages");
+          const { HumanMessage, AIMessage, SystemMessage } = await import("@langchain/core/messages");
           const baseMessages = messages.map((msg) => {
             if (msg.role === "user") {
               return new HumanMessage(msg.content);
@@ -400,9 +403,14 @@ export async function POST(request: NextRequest) {
             }
           });
 
+          // Add student context as system message (if provided)
+          const messagesWithContext = studentContextMessage
+            ? [new SystemMessage(studentContextMessage), ...baseMessages.slice(0, -1)]
+            : baseMessages.slice(0, -1);
+
           const result = await runLangGraphAgent(
             message,
-            baseMessages.slice(0, -1),
+            messagesWithContext, // Now includes system message with context if available
             convId,
             role,
             mode
