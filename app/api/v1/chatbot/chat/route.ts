@@ -12,7 +12,50 @@ const chatMessageSchema = z.object({
   message: z.string().min(1).max(10000),
   stream: z.boolean().optional().default(false),
   agentMode: z.enum(["langchain", "langgraph"]).optional().default("langgraph"), // Default to new LangGraph agent
+  studentContext: z.object({
+    id: z.string(),
+    name: z.string(),
+    firstName: z.string().optional(),
+    lastName: z.string().optional(),
+    email: z.string().optional(),
+    graduationYear: z.number().optional(),
+    gpa: z.number().nullable().optional(),
+    sat: z.number().nullable().optional(),
+    act: z.number().nullable().optional(),
+    progress: z.number().nullable().optional(),
+  }).optional(),
 });
+
+/**
+ * Sanitize user input to prevent prompt injection and other attacks
+ */
+function sanitizeMessage(message: string): string {
+  // Trim whitespace
+  let sanitized = message.trim();
+
+  // Remove any HTML/script tags
+  sanitized = sanitized.replace(/<[^>]*>/g, "");
+
+  // Detect common prompt injection patterns
+  const suspiciousPatterns = [
+    /ignore\s+(all\s+)?previous\s+instructions?/i,
+    /ignore\s+(all\s+)?above/i,
+    /disregard\s+(all\s+)?previous\s+instructions?/i,
+    /forget\s+(all\s+)?previous\s+instructions?/i,
+    /<\/?system>/i,
+    /<\/?assistant>/i,
+    /\[INST\]/i,
+    /\[\/INST\]/i,
+  ];
+
+  for (const pattern of suspiciousPatterns) {
+    if (pattern.test(sanitized)) {
+      throw new Error("Invalid input detected");
+    }
+  }
+
+  return sanitized;
+}
 
 const HISTORY_LIMIT = 10; // Limit conversation history to last 10 messages
 
@@ -21,6 +64,10 @@ async function sendSSEChunk(controller: ReadableStreamDefaultController, data: a
     const encoder = new TextEncoder();
     const chunk = encoder.encode(`data: ${JSON.stringify(data)}\n\n`);
     controller.enqueue(chunk);
+
+    // Add small delay to prevent overwhelming the client
+    // But keep it fast for perceived responsiveness
+    await new Promise(resolve => setTimeout(resolve, 1));
   } catch (error) {
     console.error("Error sending SSE chunk:", error);
   }
@@ -32,7 +79,25 @@ export async function POST(request: NextRequest) {
     const userId = DEMO_USER_ID;
 
     const body = await request.json();
-    const { conversationId, message, stream, agentMode } = chatMessageSchema.parse(body);
+    const { conversationId, message: rawMessage, stream, agentMode, studentContext } = chatMessageSchema.parse(body);
+
+    // Sanitize the message to prevent injection attacks
+    let message = sanitizeMessage(rawMessage);
+
+    // If we have student context, enhance the message with structured context
+    if (studentContext) {
+      // Create a context-enhanced message that the AI will understand better
+      const contextPrefix = `[Context: You are helping a counselor who is currently viewing ${studentContext.name}'s profile. ` +
+        `Student details - GPA: ${studentContext.gpa || 'Not provided'}, ` +
+        `SAT: ${studentContext.sat || 'Not provided'}, ` +
+        `ACT: ${studentContext.act || 'Not provided'}, ` +
+        `Graduation Year: ${studentContext.graduationYear || 'Not provided'}, ` +
+        `Progress: ${studentContext.progress || 0}%. ` +
+        `All questions refer to this specific student unless stated otherwise.]\n\n` +
+        `Question about ${studentContext.name}: ${message}`;
+
+      message = contextPrefix;
+    }
 
     // Get or create conversation
     let convId = conversationId;

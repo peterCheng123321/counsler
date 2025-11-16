@@ -2,7 +2,7 @@
 
 import { use, useState, useRef, useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Edit, MoreVertical, Send, GraduationCap, Mail, Calendar, TrendingUp, Phone, FileText, Image, Award } from "lucide-react";
+import { ArrowLeft, Edit, MoreVertical, Send, GraduationCap, Mail, Calendar, TrendingUp, Phone, FileText, Image, Award, Sparkles } from "lucide-react";
 import Link from "next/link";
 import { format } from "date-fns";
 import { Button } from "@/components/ui/button";
@@ -15,6 +15,10 @@ import { InlineEssayEditor } from "@/components/essays/inline-essay-editor";
 import { UploadModal } from "@/components/upload/upload-modal";
 import { StudentEditDialog } from "@/components/students/student-edit-dialog";
 import { CollegeManagement } from "@/components/students/college-management";
+import { LORList } from "@/components/letters/lor-list";
+import { LORGeneratorDialog } from "@/components/letters/lor-generator-dialog";
+import { CollegeRecommendations } from "@/components/students/college-recommendations";
+import { AIGuidance } from "@/components/students/ai-guidance";
 import { apiClient } from "@/lib/api/client";
 import { toast } from "sonner";
 
@@ -25,7 +29,7 @@ interface Message {
   timestamp: Date;
 }
 
-type TabId = "chatbot" | "colleges" | "essays" | "profile" | "notes";
+type TabId = "profile" | "colleges" | "essays" | "letters" | "chatbot";
 
 export default function StudentDetailPage({
   params,
@@ -34,13 +38,14 @@ export default function StudentDetailPage({
 }) {
   const { id } = use(params);
   const queryClient = useQueryClient();
-  const [activeTab, setActiveTab] = useState<TabId>("chatbot");
+  const [activeTab, setActiveTab] = useState<TabId>("profile");
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [isTyping, setIsTyping] = useState(false);
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [uploadFileType, setUploadFileType] = useState<"profile" | "resume" | "transcript">("profile");
   const [showEditDialog, setShowEditDialog] = useState(false);
+  const [showLORGenerator, setShowLORGenerator] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -109,25 +114,46 @@ export default function StudentDetailPage({
     setIsTyping(true);
 
     try {
-      // Call chat API with student context
-      const contextMessage = `I'm asking about student ${student?.first_name} ${student?.last_name} (ID: ${id}). ${input.trim()}`;
-
+      // Send message with student context as structured data
       const response = await fetch("/api/v1/chatbot/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          message: contextMessage,
-          stream: false,
+          message: input.trim(),
+          stream: false,  // Simplified: no streaming for now
+          studentContext: {
+            id: id,
+            name: `${student?.first_name} ${student?.last_name}`,
+            firstName: student?.first_name,
+            lastName: student?.last_name,
+            email: student?.email,
+            graduationYear: student?.graduation_year,
+            gpa: student?.gpa_unweighted,
+            sat: student?.sat_score,
+            act: student?.act_score,
+            progress: student?.application_progress,
+          }
         }),
       });
 
       const result = await response.json();
 
-      if (result.success) {
+      if (result.success && result.data?.message) {
+        // Ensure response mentions student name
+        let responseContent = result.data.message;
+
+        // Replace generic "the student" with actual name
+        if (student) {
+          responseContent = responseContent.replace(
+            /the student/gi,
+            `${student.first_name} ${student.last_name}`
+          );
+        }
+
         const assistantMessage: Message = {
           id: (Date.now() + 1).toString(),
           role: "assistant",
-          content: result.data.message || "I received your message.",
+          content: responseContent,
           timestamp: new Date(),
         };
         setMessages((prev) => [...prev, assistantMessage]);
@@ -135,10 +161,11 @@ export default function StudentDetailPage({
         throw new Error(result.error || "Failed to get response");
       }
     } catch (error) {
+      console.error("Chat error:", error);
       const errorMessage: Message = {
         id: (Date.now() + 1).toString(),
         role: "assistant",
-        content: "Sorry, I encountered an error. Please try again.",
+        content: "I'm having trouble accessing the information. Please try again or refresh the page.",
         timestamp: new Date(),
       };
       setMessages((prev) => [...prev, errorMessage]);
@@ -238,11 +265,11 @@ export default function StudentDetailPage({
   const fullName = `${student.first_name} ${student.last_name}`;
 
   const tabs = [
-    { id: "chatbot" as TabId, label: "AI Assistant", icon: "💬" },
-    { id: "profile" as TabId, label: "Profile", icon: "👤" },
-    { id: "colleges" as TabId, label: "Colleges", icon: "🏛️" },
-    { id: "essays" as TabId, label: "Essays", icon: "📝" },
-    { id: "notes" as TabId, label: "Notes", icon: "📋" },
+    { id: "profile" as TabId, label: "Profile" },
+    { id: "colleges" as TabId, label: "Colleges" },
+    { id: "essays" as TabId, label: "Essays" },
+    { id: "letters" as TabId, label: "Letters" },
+    { id: "chatbot" as TabId, label: "AI Chat" },
   ];
 
   return (
@@ -255,87 +282,143 @@ export default function StudentDetailPage({
         </Button>
       </Link>
 
-      {/* Student Header */}
-      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-primary to-primary-dark p-8 text-white">
-        <div className="relative z-10 flex items-start justify-between">
+      {/* Student Header - Simplified */}
+      <div className="bg-white dark:bg-surface rounded-lg border border-border p-6">
+        <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <Avatar className="h-20 w-20 border-4 border-white/30">
-              <AvatarFallback className="bg-white/20 text-white text-xl font-bold">
+            <Avatar className="h-14 w-14 border-2 border-border">
+              <AvatarFallback className="bg-primary/10 text-primary font-semibold">
                 {initials}
               </AvatarFallback>
             </Avatar>
             <div>
-              <h1 className="text-heading-1 font-bold">{fullName}</h1>
-              <p className="text-lg opacity-90">
-                Senior • Class of {student.graduation_year}
-              </p>
-              <p className="text-sm opacity-75">{student.email}</p>
+              <h1 className="text-2xl font-bold text-text-primary">{fullName}</h1>
+              <div className="flex items-center gap-3 text-sm text-text-secondary mt-1">
+                <span>Class of {student.graduation_year}</span>
+                <span>•</span>
+                <span>{student.email}</span>
+                {student.gpa_unweighted && (
+                  <>
+                    <span>•</span>
+                    <span>GPA {student.gpa_unweighted.toFixed(2)}</span>
+                  </>
+                )}
+              </div>
             </div>
           </div>
-          <div className="flex gap-2">
-            <Button
-              onClick={() => setShowEditDialog(true)}
-              variant="secondary"
-              className="bg-white/20 backdrop-blur-sm border-white/30 text-white hover:bg-white/30"
-            >
-              <Edit className="h-4 w-4 mr-2" />
-              Edit
-            </Button>
-          </div>
-        </div>
 
-        {/* Progress Bar */}
-        <div className="relative z-10 mt-6">
-          <div className="mb-2 flex items-center justify-between">
-            <span className="text-sm font-semibold">Overall Progress</span>
-            <span className="text-sm font-semibold">
-              {student.application_progress}%
-            </span>
-          </div>
-          <div className="h-3 overflow-hidden rounded-full bg-white/20">
-            <div
-              className="h-full bg-white transition-all duration-500"
-              style={{ width: `${student.application_progress}%` }}
-            />
+          <div className="flex items-center gap-4">
+            {/* Progress indicator */}
+            <div className="text-right">
+              <div className="text-sm text-text-secondary">Progress</div>
+              <div className="text-xl font-bold text-primary">{student.application_progress}%</div>
+            </div>
+
+            {/* Action buttons */}
+            <div className="flex gap-2">
+              <Button
+                onClick={() => setShowLORGenerator(true)}
+                variant="outline"
+                size="sm"
+                className="gap-1"
+              >
+                <FileText className="h-4 w-4" />
+                Letter
+              </Button>
+              <Button
+                onClick={() => setShowEditDialog(true)}
+                variant="ghost"
+                size="icon"
+              >
+                <Edit className="h-4 w-4" />
+              </Button>
+            </div>
           </div>
         </div>
       </div>
 
-      {/* Tab Navigation */}
-      <div className="flex gap-1 rounded-xl bg-background p-1">
+      {/* Tab Navigation - Simplified */}
+      <div className="flex gap-1 p-1 bg-gray-100 rounded-lg mb-4">
         {tabs.map((tab) => (
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
-            className="flex-1 rounded-lg px-4 py-3 text-sm font-semibold text-text-secondary transition-all hover:bg-surface hover:text-primary data-[active=true]:bg-surface data-[active=true]:text-primary data-[active=true]:shadow-sm"
+            className="flex-1 px-4 py-2 text-sm font-medium rounded-md transition-all data-[active=true]:bg-white data-[active=true]:shadow-sm data-[active=true]:text-primary text-text-secondary hover:text-text-primary"
             data-active={tab.id === activeTab}
           >
-            <span className="mr-2">{tab.icon}</span>
             {tab.label}
           </button>
         ))}
       </div>
 
-      {/* Tab Content */}
-      <div className="rounded-lg border border-border bg-surface">
+      {/* Tab Content - Clean Card */}
+      <Card>
         {/* Chatbot Tab */}
         {activeTab === "chatbot" && (
-          <div className="flex flex-col h-[600px]">
-            <div className="p-4 border-b border-border">
-              <h2 className="text-lg font-semibold text-text-primary">AI Assistant for {student.first_name}</h2>
-              <p className="text-sm text-text-secondary">Ask questions about this student&apos;s application, deadlines, or recommendations</p>
-            </div>
+          <div className="flex flex-col h-[calc(100vh-20rem)]">
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="text-lg">AI Assistant</CardTitle>
+                  <p className="text-sm text-text-secondary mt-1">Get help with {student.first_name}&apos;s application</p>
+                </div>
+              </div>
+            </CardHeader>
 
-            <div className="flex-1 overflow-y-auto p-4 space-y-4">
+            <CardContent className="flex-1 overflow-y-auto space-y-4">
               {messages.length === 0 && (
-                <div className="flex flex-col items-center justify-center h-full text-center">
-                  <div className="text-6xl mb-4">💬</div>
-                  <h3 className="text-xl font-semibold text-text-primary mb-2">
-                    Start a conversation
+                <div className="flex flex-col items-center justify-center h-full text-center py-8">
+                  <Sparkles className="h-8 w-8 text-primary mb-4" />
+                  <h3 className="text-lg font-medium text-text-primary mb-2">
+                    Ask me about {student.first_name}
                   </h3>
-                  <p className="text-text-secondary max-w-md">
-                    Ask me anything about {student.first_name}&apos;s college applications, deadlines, essays, or get recommendations.
+                  <p className="text-sm text-text-secondary max-w-sm mb-6">
+                    I can help with deadlines, essays, college recommendations, and application strategy.
                   </p>
+
+                  {/* Simplified Quick Actions */}
+                  <div className="flex flex-wrap gap-2 justify-center">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        setInput("What are the upcoming deadlines?");
+                        handleSendMessage();
+                      }}
+                    >
+                      Deadlines
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        setInput("Show application progress");
+                        handleSendMessage();
+                      }}
+                    >
+                      Progress
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        setInput("What's the essay status?");
+                        handleSendMessage();
+                      }}
+                    >
+                      Essays
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        setInput("Recommend colleges for this student");
+                        handleSendMessage();
+                      }}
+                    >
+                      College Recs
+                    </Button>
+                  </div>
                 </div>
               )}
 
@@ -344,17 +427,17 @@ export default function StudentDetailPage({
               ))}
 
               {isTyping && (
-                <div className="flex gap-2 items-center text-text-secondary">
-                  <div className="w-2 h-2 bg-primary rounded-full animate-bounce" />
-                  <div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: "0.1s" }} />
-                  <div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: "0.2s" }} />
+                <div className="flex items-center gap-2 text-sm text-text-secondary bg-surface/50 rounded-lg px-4 py-2">
+                  <div className="animate-spin h-4 w-4 border-2 border-primary border-t-transparent rounded-full" />
+                  <span>AI is thinking about {student.first_name}...</span>
                 </div>
               )}
 
               <div ref={messagesEndRef} />
-            </div>
+            </CardContent>
 
             <div className="p-4 border-t border-border">
+
               <div className="flex gap-2">
                 <textarea
                   ref={textareaRef}
@@ -367,13 +450,13 @@ export default function StudentDetailPage({
                     }
                   }}
                   placeholder="Ask about this student..."
-                  className="flex-1 resize-none rounded-lg border border-border bg-background px-4 py-3 text-sm text-text-primary placeholder-text-tertiary focus:outline-none focus:ring-2 focus:ring-primary"
+                  className="flex-1 resize-none rounded-lg border border-border/60 bg-background/95 px-4 py-3 text-sm text-text-primary placeholder-text-tertiary focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary transition-all duration-200"
                   rows={1}
                 />
                 <Button
                   onClick={handleSendMessage}
                   disabled={!input.trim() || isTyping}
-                  className="h-auto"
+                  className="h-auto px-4 bg-primary hover:bg-primary-hover text-white transition-all duration-200"
                 >
                   <Send className="h-4 w-4" />
                 </Button>
@@ -384,216 +467,80 @@ export default function StudentDetailPage({
 
         {/* Profile Tab */}
         {activeTab === "profile" && (
-          <div className="p-6 space-y-6">
-            {/* Basic Information */}
-            <div>
-              <h2 className="text-xl font-semibold text-text-primary mb-4">Basic Information</h2>
-              <Card>
-                <CardContent className="pt-6">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="flex items-start gap-3">
-                      <Mail className="h-5 w-5 text-primary mt-0.5" />
-                      <div>
-                        <p className="text-sm text-text-secondary">Email</p>
-                        <p className="text-text-primary">{student.email}</p>
-                      </div>
+          <CardContent className="p-6">
+            <div className="space-y-6">
+              {/* Contact Info Section */}
+              <div>
+                <h3 className="text-sm font-medium text-text-secondary mb-3">Contact</h3>
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2 text-sm">
+                    <Mail className="h-4 w-4 text-text-tertiary" />
+                    <span>{student.email}</span>
+                  </div>
+                  {student.phone && (
+                    <div className="flex items-center gap-2 text-sm">
+                      <Phone className="h-4 w-4 text-text-tertiary" />
+                      <span>{student.phone}</span>
                     </div>
-                    {student.phone && (
-                      <div className="flex items-start gap-3">
-                        <Phone className="h-5 w-5 text-primary mt-0.5" />
-                        <div>
-                          <p className="text-sm text-text-secondary">Phone</p>
-                          <p className="text-text-primary">{student.phone}</p>
-                        </div>
-                      </div>
-                    )}
-                    {student.date_of_birth && (
-                      <div className="flex items-start gap-3">
-                        <Calendar className="h-5 w-5 text-primary mt-0.5" />
-                        <div>
-                          <p className="text-sm text-text-secondary">Date of Birth</p>
-                          <p className="text-text-primary">
-                            {format(new Date(student.date_of_birth), "MMMM d, yyyy")}
-                          </p>
-                        </div>
-                      </div>
-                    )}
-                    <div className="flex items-start gap-3">
-                      <GraduationCap className="h-5 w-5 text-primary mt-0.5" />
-                      <div>
-                        <p className="text-sm text-text-secondary">Graduation Year</p>
-                        <p className="text-text-primary">{student.graduation_year}</p>
-                      </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Academic Stats - Simple Grid */}
+              <div>
+                <h3 className="text-sm font-medium text-text-secondary mb-3">Academics</h3>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  <div className="bg-gray-50 rounded-lg p-3">
+                    <div className="text-xs text-text-secondary mb-1">GPA</div>
+                    <div className="text-lg font-semibold">
+                      {student.gpa_unweighted?.toFixed(2) || "—"}
                     </div>
                   </div>
-                </CardContent>
-              </Card>
-            </div>
-
-            {/* Academic Profile */}
-            <div>
-              <h2 className="text-xl font-semibold text-text-primary mb-4">Academic Profile</h2>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                <Card>
-                  <CardHeader className="pb-3">
-                    <CardTitle className="text-sm font-medium text-text-secondary">GPA (Unweighted)</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-2xl font-bold text-text-primary">
-                      {student.gpa_unweighted?.toFixed(2) || "N/A"}
+                  <div className="bg-gray-50 rounded-lg p-3">
+                    <div className="text-xs text-text-secondary mb-1">SAT</div>
+                    <div className="text-lg font-semibold">
+                      {student.sat_score || "—"}
                     </div>
-                  </CardContent>
-                </Card>
-
-                <Card>
-                  <CardHeader className="pb-3">
-                    <CardTitle className="text-sm font-medium text-text-secondary">GPA (Weighted)</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-2xl font-bold text-text-primary">
-                      {student.gpa_weighted?.toFixed(2) || "N/A"}
-                    </div>
-                  </CardContent>
-                </Card>
-
-                <Card>
-                  <CardHeader className="pb-3">
-                    <CardTitle className="text-sm font-medium text-text-secondary">SAT Score</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="flex items-center gap-2">
-                      <Award className="h-5 w-5 text-primary" />
-                      <span className="text-2xl font-bold text-text-primary">
-                        {student.sat_score || "N/A"}
-                      </span>
-                    </div>
-                  </CardContent>
-                </Card>
-
-                <Card>
-                  <CardHeader className="pb-3">
-                    <CardTitle className="text-sm font-medium text-text-secondary">ACT Score</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="flex items-center gap-2">
-                      <Award className="h-5 w-5 text-primary" />
-                      <span className="text-2xl font-bold text-text-primary">
-                        {student.act_score || "N/A"}
-                      </span>
-                    </div>
-                  </CardContent>
-                </Card>
-              </div>
-            </div>
-
-            {/* Application Progress */}
-            <div>
-              <h2 className="text-xl font-semibold text-text-primary mb-4">Application Progress</h2>
-              <Card>
-                <CardContent className="pt-6">
-                  <div className="space-y-4">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <TrendingUp className="h-5 w-5 text-primary" />
-                        <span className="font-semibold text-text-primary">Overall Progress</span>
-                      </div>
-                      <span className="text-2xl font-bold text-text-primary">
-                        {student.application_progress}%
-                      </span>
-                    </div>
-                    <Progress value={student.application_progress} className="h-3" />
                   </div>
-                </CardContent>
-              </Card>
-            </div>
-
-            {/* Documents & Files */}
-            <div>
-              <h2 className="text-xl font-semibold text-text-primary mb-4">Documents & Files</h2>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <Card
-                  className="cursor-pointer hover:bg-surface/80 transition-colors"
-                  onClick={() => handleOpenUploadModal("profile")}
-                >
-                  <CardContent className="pt-6">
-                    <div className="flex flex-col items-center text-center space-y-3">
-                      <div className={`rounded-full p-3 ${student.profile_picture_url ? 'bg-green-100' : 'bg-gray-100'}`}>
-                        <Image className={`h-6 w-6 ${student.profile_picture_url ? 'text-green-600' : 'text-gray-400'}`} aria-label="Profile picture icon" />
-                      </div>
-                      <div>
-                        <p className="text-sm font-medium text-text-primary mb-1">Profile Picture</p>
-                        {student.profile_picture_url ? (
-                          <span className="text-xs text-green-600">Uploaded</span>
-                        ) : (
-                          <span className="text-xs text-text-secondary">Click to upload</span>
+                  <div className="bg-gray-50 rounded-lg p-3">
+                    <div className="text-xs text-text-secondary mb-1">ACT</div>
+                    <div className="text-lg font-semibold">
+                      {student.act_score || "—"}
+                    </div>
+                  </div>
+                  {student.class_rank && (
+                    <div className="bg-gray-50 rounded-lg p-3">
+                      <div className="text-xs text-text-secondary mb-1">Rank</div>
+                      <div className="text-lg font-semibold">
+                        {student.class_rank}
+                        {student.class_size && (
+                          <span className="text-xs font-normal text-text-secondary">/{student.class_size}</span>
                         )}
                       </div>
                     </div>
-                  </CardContent>
-                </Card>
+                  )}
+                </div>
+              </div>
 
-                <Card
-                  className="cursor-pointer hover:bg-surface/80 transition-colors"
-                  onClick={() => handleOpenUploadModal("resume")}
-                >
-                  <CardContent className="pt-6">
-                    <div className="flex flex-col items-center text-center space-y-3">
-                      <div className={`rounded-full p-3 ${student.resume_url ? 'bg-blue-100' : 'bg-gray-100'}`}>
-                        <FileText className={`h-6 w-6 ${student.resume_url ? 'text-blue-600' : 'text-gray-400'}`} />
-                      </div>
-                      <div>
-                        <p className="text-sm font-medium text-text-primary mb-1">Resume</p>
-                        {student.resume_url ? (
-                          <span className="text-xs text-blue-600">Uploaded</span>
-                        ) : (
-                          <span className="text-xs text-text-secondary">Click to upload</span>
-                        )}
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-
-                <Card
-                  className="cursor-pointer hover:bg-surface/80 transition-colors"
-                  onClick={() => handleOpenUploadModal("transcript")}
-                >
-                  <CardContent className="pt-6">
-                    <div className="flex flex-col items-center text-center space-y-3">
-                      <div className={`rounded-full p-3 ${student.transcript_url ? 'bg-purple-100' : 'bg-gray-100'}`}>
-                        <FileText className={`h-6 w-6 ${student.transcript_url ? 'text-purple-600' : 'text-gray-400'}`} />
-                      </div>
-                      <div>
-                        <p className="text-sm font-medium text-text-primary mb-1">Transcript</p>
-                        {student.transcript_url ? (
-                          <span className="text-xs text-purple-600">Uploaded</span>
-                        ) : (
-                          <span className="text-xs text-text-secondary">Click to upload</span>
-                        )}
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
+              {/* AI Features */}
+              <div className="mt-6 grid grid-cols-1 lg:grid-cols-2 gap-4">
+                <CollegeRecommendations student={student} />
+                <AIGuidance student={student} />
               </div>
             </div>
-          </div>
+          </CardContent>
         )}
 
         {/* Colleges Tab */}
         {activeTab === "colleges" && (
-          <div className="p-6">
+          <CardContent className="p-6">
             <CollegeManagement studentId={id} />
-          </div>
+          </CardContent>
         )}
 
         {/* Essays Tab */}
         {activeTab === "essays" && (
-          <div className="p-6">
-            <div className="mb-6">
-              <h2 className="text-xl font-semibold text-text-primary mb-2">Essay Editor</h2>
-              <p className="text-text-secondary">
-                Edit the essay and get AI-powered suggestions for improvement
-              </p>
-            </div>
+          <CardContent className="p-6">
 
             {essayLoading ? (
               <div className="flex items-center justify-center p-12">
@@ -618,17 +565,16 @@ export default function StudentDetailPage({
                 <Button onClick={handleCreateNewEssay}>Create New Essay</Button>
               </div>
             )}
-          </div>
+          </CardContent>
         )}
 
-        {/* Notes Tab */}
-        {activeTab === "notes" && (
-          <div className="p-6">
-            <h2 className="text-xl font-semibold text-text-primary mb-4">Counselor Notes</h2>
-            <p className="text-text-secondary">Notes will be displayed here.</p>
-          </div>
+        {/* Letters Tab */}
+        {activeTab === "letters" && (
+          <CardContent className="p-6">
+            <LORList studentId={id} studentName={fullName} />
+          </CardContent>
         )}
-      </div>
+      </Card>
 
       {/* Upload Modal */}
       {student && (
@@ -656,6 +602,20 @@ export default function StudentDetailPage({
           student={student}
           onSuccess={() => {
             queryClient.invalidateQueries({ queryKey: ["student", id] });
+          }}
+        />
+      )}
+
+      {/* LOR Generator Dialog */}
+      {student && (
+        <LORGeneratorDialog
+          open={showLORGenerator}
+          onOpenChange={setShowLORGenerator}
+          studentId={id}
+          studentName={fullName}
+          onSuccess={() => {
+            queryClient.invalidateQueries({ queryKey: ["letters", id] });
+            setActiveTab("letters"); // Switch to letters tab after generation
           }}
         />
       )}

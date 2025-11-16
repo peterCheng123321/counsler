@@ -3,7 +3,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { queryCache } from "@/lib/cache/query-cache";
 import { z } from "zod";
 import { DEMO_USER_ID } from "@/lib/constants";
-import { getStudentsTool } from "@/lib/ai/langchain-tools";
+import { getStudentsTool } from "@/lib/ai/tools";
 
 const studentSchema = z.object({
   firstName: z.string().min(2).max(50),

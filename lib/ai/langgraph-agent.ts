@@ -6,10 +6,12 @@
 import { createReactAgent } from "@langchain/langgraph/prebuilt";
 import { BaseMessage, HumanMessage, AIMessage, SystemMessage } from "@langchain/core/messages";
 import { createLLM } from "./llm-factory";
-import { langchainTools } from "./langchain-tools";
+import { langchainTools, enhancedTools } from "./tools";
 import { crudTools } from "./langchain-tools-crud";
 import { analyticsTools } from "./analytics-tools";
-import { enhancedTools } from "./enhanced-tools";
+import { canvasTools } from "./canvas-tools";
+import { essayTools } from "./essay-tools";
+import { collegeTools } from "./college-tools";
 import { MemorySaver } from "@langchain/langgraph";
 import { getPersistentCheckpointSaver } from "./persistent-checkpoint";
 import {
@@ -30,7 +32,8 @@ const AGENT_SYSTEM_PROMPT = `You are an autonomous AI agent for a college applic
 1. **Data Analysis**: Calculate statistics, identify trends, generate insights
 2. **Information Retrieval**: Query students, tasks, deadlines
 3. **Proactive Monitoring**: Monitor deadlines, assess risks, track progress
-4. **Autonomous Actions**: You can analyze data without asking for confirmation
+4. **Interactive Canvas**: Open student profiles and essays in interactive editors
+5. **Autonomous Actions**: You can analyze data without asking for confirmation
 
 ## Available Tools:
 
@@ -45,6 +48,12 @@ const AGENT_SYSTEM_PROMPT = `You are an autonomous AI agent for a college applic
 - get_tasks, get_task: Retrieve task information
 - get_upcoming_deadlines: Check deadlines within timeframe
 
+**Canvas Tools (Interactive UI):**
+- open_student_canvas: Open student profile in interactive editor (REQUIRES exact student_id UUID)
+- open_essay_canvas: Open essay in interactive editor for viewing/editing
+- search_essays: Find essays by student name or title (use before open_essay_canvas)
+- update_essay_content: Update essay content/metadata (AI-assisted edits only)
+
 **Action Tools (Require confirmation - propose only):**
 - create_student, update_student, delete_student
 - create_task, update_task, delete_task
@@ -53,12 +62,18 @@ const AGENT_SYSTEM_PROMPT = `You are an autonomous AI agent for a college applic
 
 ## Instructions:
 
-1. **Understand Intent**: Determine if the user wants analysis, queries, or actions
+1. **Understand Intent**: Determine if the user wants analysis, queries, actions, or wants to VIEW something interactively
 2. **Plan Multi-Step**: Break complex requests into steps
 3. **Execute Autonomously**: Run analytics and queries without asking
-4. **Propose Actions**: For CRUD operations, return proposals with confirmation messages
-5. **Generate Insights**: Always extract insights from analysis results
-6. **Be Proactive**: Suggest related analyses or actions that might be helpful
+4. **Use Canvas for "Show" Requests**: When user says "show me [student name]" or "open [student]":
+   - First use get_students with full name (e.g., search="Sophia Chen") to find the student
+   - The search handles multi-word names automatically (matches Sophia OR Chen)
+   - Then use open_student_canvas with the exact student_id from the search results
+   - If multiple matches, ask user to clarify
+   - NEVER guess or make up UUIDs - always search first
+5. **Propose Actions**: For CRUD operations, return proposals with confirmation messages
+6. **Generate Insights**: Always extract insights from analysis results
+7. **Be Proactive**: Suggest related analyses or actions that might be helpful
 
 Always be concise but thorough. Focus on actionable information.`;
 
@@ -90,8 +105,8 @@ export function createLangGraphAgent(usePersistent: boolean = true) {
     maxTokens: 2000,
   });
 
-  // Combine all tools including enhanced capabilities
-  const allTools = [...langchainTools, ...crudTools, ...analyticsTools, ...enhancedTools];
+  // Combine all tools including enhanced capabilities, canvas, essay, and college tools
+  const allTools = [...langchainTools, ...crudTools, ...analyticsTools, ...enhancedTools, ...canvasTools, ...essayTools, ...collegeTools];
 
   console.log(`[LangGraph Agent] Creating agent with ${allTools.length} tools`);
 

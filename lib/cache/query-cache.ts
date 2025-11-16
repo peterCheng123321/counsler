@@ -10,7 +10,7 @@ interface CacheEntry<T> {
 
 export class QueryCache {
   private cache: Map<string, CacheEntry<any>> = new Map();
-  private defaultTTL: number = 30000; // 30 seconds
+  private defaultTTL: number = 120000; // 2 minutes for better speed
 
   constructor(defaultTTL?: number) {
     if (defaultTTL) {
@@ -121,5 +121,5 @@ export class QueryCache {
   }
 }
 
-export const queryCache = new QueryCache(30000); // 30 second default TTL
+export const queryCache = new QueryCache(120000); // 2 minute default TTL for speed
 

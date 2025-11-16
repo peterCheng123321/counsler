@@ -29,8 +29,10 @@ export async function GET(request: NextRequest) {
 
     // Search by name or location if provided
     if (search) {
+      // Sanitize search input to prevent SQL injection
+      const sanitizedSearch = search.replace(/[^a-zA-Z0-9\s]/g, '');
       query = query.or(
-        `name.ilike.%${search}%,location_city.ilike.%${search}%,location_state.ilike.%${search}%`
+        `name.ilike.%${sanitizedSearch}%,location_city.ilike.%${sanitizedSearch}%,location_state.ilike.%${sanitizedSearch}%`
       );
     }
 

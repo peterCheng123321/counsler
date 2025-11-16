@@ -12,8 +12,7 @@ import { CalendarView } from "@/components/tasks/calendar-view";
 import { StatsCard } from "@/components/charts/stats-card";
 import { TimelineChart, type TimelineData } from "@/components/charts/timeline-chart";
 import { DeadlineCalendar } from "@/components/charts/deadline-calendar";
-import { QuickAIButton } from "@/components/ai/quick-ai-button";
-import { InsightsPanel } from "@/components/insights/insights-panel";
+import { SmartTaskAssistant } from "@/components/ai/smart-task-assistant";
 import { apiClient, type Task } from "@/lib/api/client";
 import { format, startOfWeek, endOfWeek, eachDayOfInterval, isSameDay } from "date-fns";
 import { toast } from "sonner";
@@ -28,6 +27,9 @@ function TasksPageContent() {
     studentId?: string;
     dueDateFrom?: string;
     dueDateTo?: string;
+    urgency?: string;
+    sortBy?: string;
+    showCompleted?: boolean;
   }>({});
 
   // Read URL parameters and apply them
@@ -68,7 +70,100 @@ function TasksPageContent() {
     queryFn: () => apiClient.getTasks(filters),
   });
 
-  const tasks = data?.data || [];
+  const rawTasks = data?.data || [];
+
+  // Client-side filtering and sorting
+  const tasks = useMemo(() => {
+    let filtered = [...rawTasks];
+    const now = new Date();
+
+    // Apply urgency filter
+    if (filters.urgency) {
+      switch (filters.urgency) {
+        case 'overdue':
+          filtered = filtered.filter(t => t.due_date && new Date(t.due_date) < now && t.status !== 'completed');
+          break;
+        case 'today':
+          filtered = filtered.filter(t => t.due_date && new Date(t.due_date).toDateString() === now.toDateString());
+          break;
+        case 'this-week': {
+          const weekEnd = new Date(now);
+          weekEnd.setDate(weekEnd.getDate() + 7);
+          filtered = filtered.filter(t => t.due_date && new Date(t.due_date) >= now && new Date(t.due_date) <= weekEnd);
+          break;
+        }
+        case 'next-week': {
+          const nextWeekStart = new Date(now);
+          nextWeekStart.setDate(nextWeekStart.getDate() + 7);
+          const nextWeekEnd = new Date(nextWeekStart);
+          nextWeekEnd.setDate(nextWeekEnd.getDate() + 7);
+          filtered = filtered.filter(t => t.due_date && new Date(t.due_date) >= nextWeekStart && new Date(t.due_date) <= nextWeekEnd);
+          break;
+        }
+        case 'upcoming': {
+          const upcomingEnd = new Date(now);
+          upcomingEnd.setDate(upcomingEnd.getDate() + 30);
+          filtered = filtered.filter(t => t.due_date && new Date(t.due_date) >= now && new Date(t.due_date) <= upcomingEnd);
+          break;
+        }
+      }
+    }
+
+    // Hide completed unless explicitly shown
+    if (!filters.showCompleted && !filters.status) {
+      filtered = filtered.filter(t => t.status !== 'completed');
+    }
+
+    // Apply sorting
+    const sortBy = filters.sortBy || 'due-date';
+    switch (sortBy) {
+      case 'due-date':
+        filtered.sort((a, b) => {
+          if (!a.due_date && !b.due_date) return 0;
+          if (!a.due_date) return 1;
+          if (!b.due_date) return -1;
+          return new Date(a.due_date).getTime() - new Date(b.due_date).getTime();
+        });
+        break;
+      case 'due-date-desc':
+        filtered.sort((a, b) => {
+          if (!a.due_date && !b.due_date) return 0;
+          if (!a.due_date) return -1;
+          if (!b.due_date) return 1;
+          return new Date(b.due_date).getTime() - new Date(a.due_date).getTime();
+        });
+        break;
+      case 'priority-high': {
+        const priorityOrder = { high: 0, medium: 1, low: 2 };
+        filtered.sort((a, b) => {
+          const aPrio = priorityOrder[a.priority as keyof typeof priorityOrder] ?? 3;
+          const bPrio = priorityOrder[b.priority as keyof typeof priorityOrder] ?? 3;
+          return aPrio - bPrio;
+        });
+        break;
+      }
+      case 'priority-low': {
+        const priorityOrder = { low: 0, medium: 1, high: 2 };
+        filtered.sort((a, b) => {
+          const aPrio = priorityOrder[a.priority as keyof typeof priorityOrder] ?? 3;
+          const bPrio = priorityOrder[b.priority as keyof typeof priorityOrder] ?? 3;
+          return aPrio - bPrio;
+        });
+        break;
+      }
+      case 'title':
+        filtered.sort((a, b) => a.title.localeCompare(b.title));
+        break;
+      case 'created':
+        filtered.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+        break;
+      case 'updated':
+        filtered.sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime());
+        break;
+    }
+
+    return filtered;
+  }, [rawTasks, filters]);
 
   // Group tasks by status
   const pendingTasks = tasks.filter((t) => t.status === "pending");
@@ -81,17 +176,30 @@ function TasksPageContent() {
     const weekStart = startOfWeek(now);
     const weekEnd = endOfWeek(now);
 
+    // Calculate next week dates
+    const nextWeekStart = new Date(weekEnd);
+    nextWeekStart.setDate(nextWeekStart.getDate() + 1);
+    const nextWeekEnd = new Date(nextWeekStart);
+    nextWeekEnd.setDate(nextWeekEnd.getDate() + 7);
+
     // Overdue tasks (pending or in_progress with past due date)
     const overdueTasks = tasks.filter((t) => {
       if (t.status === "completed" || !t.due_date) return false;
       return new Date(t.due_date) < now;
     }).length;
 
-    // Tasks due this week
+    // Tasks due this week (excluding completed)
     const thisWeekTasks = tasks.filter((t) => {
-      if (!t.due_date) return false;
+      if (t.status === "completed" || !t.due_date) return false;
       const dueDate = new Date(t.due_date);
       return dueDate >= weekStart && dueDate <= weekEnd;
+    }).length;
+
+    // Tasks due next week (excluding completed)
+    const nextWeekTasks = tasks.filter((t) => {
+      if (t.status === "completed" || !t.due_date) return false;
+      const dueDate = new Date(t.due_date);
+      return dueDate >= nextWeekStart && dueDate <= nextWeekEnd;
     }).length;
 
     // Weekly timeline data
@@ -117,6 +225,7 @@ function TasksPageContent() {
       completed: completedTasks.length,
       overdue: overdueTasks,
       thisWeek: thisWeekTasks,
+      nextWeek: nextWeekTasks,
       timelineData,
     };
   }, [tasks, pendingTasks, inProgressTasks, completedTasks]);
@@ -132,28 +241,9 @@ function TasksPageContent() {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <QuickAIButton
-            suggestions={[
-              {
-                label: "What should I focus on today?",
-                prompt: "Based on my current tasks, what should I prioritize today?",
-              },
-              {
-                label: "Show overdue tasks",
-                prompt: "Which tasks are overdue and need immediate attention?",
-              },
-              {
-                label: "Weekly task summary",
-                prompt: "Give me a summary of tasks for this week",
-              },
-              {
-                label: "Suggest task priorities",
-                prompt: "Analyze my tasks and suggest which ones should be higher priority",
-              },
-            ]}
-            onSelect={(prompt, response) => {
-              toast.info("AI Response", { description: response });
-            }}
+          <SmartTaskAssistant
+            tasks={tasks}
+            onApplyFilters={setFilters}
           />
           <div className="flex rounded-lg border border-border bg-background p-1">
             <Button
@@ -180,9 +270,27 @@ function TasksPageContent() {
         </div>
       </div>
 
+      {/* Deadline Urgency Banner */}
+      {!isLoading && !error && (stats.overdue > 0 || stats.thisWeek > 0) && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 p-4">
+          <div className="flex items-start gap-3">
+            <AlertCircle className="h-5 w-5 text-amber-600 mt-0.5" />
+            <div className="flex-1">
+              <h3 className="font-semibold text-amber-900 mb-1">Deadline Alert</h3>
+              <p className="text-sm text-amber-800">
+                {stats.overdue > 0 && `${stats.overdue} overdue task${stats.overdue !== 1 ? 's' : ''}`}
+                {stats.overdue > 0 && stats.thisWeek > 0 && ', '}
+                {stats.thisWeek > 0 && `${stats.thisWeek} due this week`}
+                {stats.nextWeek > 0 && `, ${stats.nextWeek} due next week`}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Statistics Cards */}
       {!isLoading && !error && tasks.length > 0 && (
-        <div className="grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-4">
+        <div className="grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-4 lg:grid-cols-6">
           <StatsCard
             title="Total Tasks"
             value={stats.total}
@@ -191,18 +299,32 @@ function TasksPageContent() {
             description="All tasks in system"
           />
           <StatsCard
-            title="Pending"
-            value={stats.pending}
-            icon={Clock}
-            iconColor="text-orange-600"
-            description="Tasks awaiting action"
-          />
-          <StatsCard
             title="Overdue"
             value={stats.overdue}
             icon={AlertCircle}
             iconColor="text-red-600"
             description="Tasks past due date"
+          />
+          <StatsCard
+            title="Due This Week"
+            value={stats.thisWeek}
+            icon={Clock}
+            iconColor="text-amber-600"
+            description="Pending this week"
+          />
+          <StatsCard
+            title="Due Next Week"
+            value={stats.nextWeek}
+            icon={Calendar}
+            iconColor="text-purple-600"
+            description="Upcoming next week"
+          />
+          <StatsCard
+            title="In Progress"
+            value={stats.inProgress}
+            icon={ListTodo}
+            iconColor="text-orange-600"
+            description="Currently working on"
           />
           <StatsCard
             title="Completed"
@@ -243,43 +365,96 @@ function TasksPageContent() {
         </div>
       )}
 
-      {/* AI Insights */}
-      <div className="rounded-xl border border-border bg-surface p-6 shadow-sm">
-        <h2 className="text-heading-3 font-semibold text-text-primary mb-4">
-          AI Insights
-        </h2>
-        <InsightsPanel category="deadline" limit={5} />
-      </div>
-
       {/* Filters */}
       <div className="flex items-center gap-4">
         <TaskFilters filters={filters} onFiltersChange={setFilters} />
       </div>
 
       {/* Active Filters */}
-      {(filters.status ||
-        filters.priority ||
-        filters.studentId ||
-        filters.dueDateFrom ||
-        filters.dueDateTo) && (
-        <div className="flex flex-wrap gap-2">
+      {Object.values(filters).some(v => v !== undefined && v !== false) && (
+        <div className="flex flex-wrap gap-2 animate-in slide-in-from-top duration-300">
+          {filters.sortBy && filters.sortBy !== 'due-date' && (
+            <div className="flex items-center gap-2 rounded-full bg-blue-50 border border-blue-200 px-3 py-1.5 text-sm text-blue-700 transition-all hover:bg-blue-100">
+              <span className="text-xs font-medium">Sort:</span> {
+                filters.sortBy === 'due-date-desc' ? 'Latest First' :
+                filters.sortBy === 'priority-high' ? 'High Priority' :
+                filters.sortBy === 'priority-low' ? 'Low Priority' :
+                filters.sortBy === 'title' ? 'A-Z' :
+                filters.sortBy === 'created' ? 'Recently Created' :
+                filters.sortBy === 'updated' ? 'Recently Updated' :
+                filters.sortBy
+              }
+              <button
+                onClick={() => setFilters({ ...filters, sortBy: undefined })}
+                className="hover:text-blue-900 transition-colors"
+              >
+                ×
+              </button>
+            </div>
+          )}
+          {filters.urgency && (
+            <div className="flex items-center gap-2 rounded-full bg-red-50 border border-red-200 px-3 py-1.5 text-sm text-red-700 transition-all hover:bg-red-100">
+              <span className="text-xs font-medium">Urgency:</span> {
+                filters.urgency === 'overdue' ? 'Overdue' :
+                filters.urgency === 'today' ? 'Today' :
+                filters.urgency === 'this-week' ? 'This Week' :
+                filters.urgency === 'next-week' ? 'Next Week' :
+                'Upcoming'
+              }
+              <button
+                onClick={() => setFilters({ ...filters, urgency: undefined })}
+                className="hover:text-red-900 transition-colors"
+              >
+                ×
+              </button>
+            </div>
+          )}
           {filters.status && (
-            <div className="flex items-center gap-2 rounded-full bg-primary-light px-3 py-1 text-sm text-primary-dark">
-              Status: {filters.status}
+            <div className="flex items-center gap-2 rounded-full bg-purple-50 border border-purple-200 px-3 py-1.5 text-sm text-purple-700 transition-all hover:bg-purple-100">
+              <span className="text-xs font-medium">Status:</span> {
+                filters.status.charAt(0).toUpperCase() + filters.status.slice(1).replace('_', ' ')
+              }
               <button
                 onClick={() => setFilters({ ...filters, status: undefined })}
-                className="hover:text-primary"
+                className="hover:text-purple-900 transition-colors"
               >
                 ×
               </button>
             </div>
           )}
           {filters.priority && (
-            <div className="flex items-center gap-2 rounded-full bg-primary-light px-3 py-1 text-sm text-primary-dark">
-              Priority: {filters.priority}
+            <div className="flex items-center gap-2 rounded-full bg-amber-50 border border-amber-200 px-3 py-1.5 text-sm text-amber-700 transition-all hover:bg-amber-100">
+              <span className="text-xs font-medium">Priority:</span> {
+                filters.priority.charAt(0).toUpperCase() + filters.priority.slice(1)
+              }
               <button
                 onClick={() => setFilters({ ...filters, priority: undefined })}
-                className="hover:text-primary"
+                className="hover:text-amber-900 transition-colors"
+              >
+                ×
+              </button>
+            </div>
+          )}
+          {(filters.dueDateFrom || filters.dueDateTo) && (
+            <div className="flex items-center gap-2 rounded-full bg-green-50 border border-green-200 px-3 py-1.5 text-sm text-green-700 transition-all hover:bg-green-100">
+              <span className="text-xs font-medium">Due:</span>
+              {filters.dueDateFrom && format(new Date(filters.dueDateFrom), 'MMM d')}
+              {filters.dueDateFrom && filters.dueDateTo && ' - '}
+              {filters.dueDateTo && format(new Date(filters.dueDateTo), 'MMM d, yyyy')}
+              <button
+                onClick={() => setFilters({ ...filters, dueDateFrom: undefined, dueDateTo: undefined })}
+                className="hover:text-green-900 transition-colors"
+              >
+                ×
+              </button>
+            </div>
+          )}
+          {filters.showCompleted && (
+            <div className="flex items-center gap-2 rounded-full bg-indigo-50 border border-indigo-200 px-3 py-1.5 text-sm text-indigo-700 transition-all hover:bg-indigo-100">
+              <span className="text-xs font-medium">Showing completed tasks</span>
+              <button
+                onClick={() => setFilters({ ...filters, showCompleted: false })}
+                className="hover:text-indigo-900 transition-colors"
               >
                 ×
               </button>
@@ -344,8 +519,14 @@ function TasksPageContent() {
                     Pending ({pendingTasks.length})
                   </h2>
                   <div className="space-y-3">
-                    {pendingTasks.map((task) => (
-                      <TaskCard key={task.id} task={task} />
+                    {pendingTasks.map((task, index) => (
+                      <div
+                        key={task.id}
+                        className="animate-in slide-in-from-left duration-300"
+                        style={{ animationDelay: `${index * 50}ms` }}
+                      >
+                        <TaskCard task={task} />
+                      </div>
                     ))}
                   </div>
                 </div>
@@ -358,8 +539,14 @@ function TasksPageContent() {
                     In Progress ({inProgressTasks.length})
                   </h2>
                   <div className="space-y-3">
-                    {inProgressTasks.map((task) => (
-                      <TaskCard key={task.id} task={task} />
+                    {inProgressTasks.map((task, index) => (
+                      <div
+                        key={task.id}
+                        className="animate-in slide-in-from-left duration-300"
+                        style={{ animationDelay: `${index * 50}ms` }}
+                      >
+                        <TaskCard task={task} />
+                      </div>
                     ))}
                   </div>
                 </div>
@@ -372,8 +559,14 @@ function TasksPageContent() {
                     Completed ({completedTasks.length})
                   </h2>
                   <div className="space-y-3">
-                    {completedTasks.map((task) => (
-                      <TaskCard key={task.id} task={task} />
+                    {completedTasks.map((task, index) => (
+                      <div
+                        key={task.id}
+                        className="animate-in slide-in-from-left duration-300"
+                        style={{ animationDelay: `${index * 50}ms` }}
+                      >
+                        <TaskCard task={task} />
+                      </div>
                     ))}
                   </div>
                 </div>
@@ -401,11 +594,12 @@ function TasksPageContent() {
       {!isLoading && !error && (
         <button
           onClick={() => setShowAddModal(true)}
-          className="fixed bottom-8 right-8 z-50 h-14 w-14 rounded-full bg-primary text-white shadow-lg hover:bg-primary-hover hover:shadow-xl transition-all duration-300 hover:scale-110 active:scale-95 flex items-center justify-center group"
+          className="fixed bottom-8 right-8 z-50 h-14 w-14 rounded-full bg-gradient-to-r from-primary to-primary-hover text-white shadow-lg hover:shadow-2xl transition-all duration-300 hover:scale-110 active:scale-95 flex items-center justify-center group animate-in zoom-in-50 slide-in-from-bottom-4 animate-bounce-slow"
           aria-label="Add new task"
           title="Add new task"
         >
           <Plus className="h-6 w-6 transition-transform group-hover:rotate-90 duration-300" />
+          <span className="absolute inset-0 rounded-full bg-primary opacity-0 group-hover:opacity-20 group-hover:animate-ping"></span>
         </button>
       )}
     </div>

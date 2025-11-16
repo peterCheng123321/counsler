@@ -87,3 +87,6 @@ curl http://localhost:3000/api/health
 **🎊 Everything is ready! Open http://localhost:3000 and start using the application!**
 
 
+
+
+

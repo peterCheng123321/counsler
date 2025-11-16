@@ -7,4 +7,10 @@ export function createClient() {
   );
 }
 
+// Export a singleton instance for direct imports
+export const supabase = createClient();
+
+
+
+
 

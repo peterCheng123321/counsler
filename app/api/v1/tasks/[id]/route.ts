@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { z } from "zod";
 import { DEMO_USER_ID } from "@/lib/constants";
-import { getTaskTool } from "@/lib/ai/langchain-tools";
+import { getTaskTool } from "@/lib/ai/tools";
 
 const updateTaskSchema = z.object({
   title: z.string().min(1).max(255).optional(),

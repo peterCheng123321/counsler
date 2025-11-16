@@ -1,0 +1,403 @@
+{
+  "test_suite": "Comprehensive Chatbot Functionality Tests",
+  "description": "Test all chatbot capabilities: student profiles, essays, tasks, colleges, AI suggestions",
+  "total_tests": 25,
+  "categories": {
+    "student_management": 5,
+    "essay_management": 8,
+    "task_management": 4,
+    "college_management": 4,
+    "ai_features": 4
+  },
+
+  "tests": [
+    {
+      "test_id": "STUDENT-001",
+      "category": "student_management",
+      "name": "Open Student Profile by Name",
+      "description": "Test opening student canvas with multi-word name",
+      "request": {
+        "message": "show me sophia chen profile",
+        "stream": false,
+        "agentMode": "langchain"
+      },
+      "expected_tools": ["get_students", "open_student_canvas"],
+      "expected_outcome": "Canvas opens with Sophia Chen's profile",
+      "pass_criteria": "Response mentions 'profile' and 'canvas'"
+    },
+
+    {
+      "test_id": "STUDENT-002",
+      "category": "student_management",
+      "name": "Search Students by Criteria",
+      "description": "Test searching students by graduation year",
+      "request": {
+        "message": "list all students graduating in 2025",
+        "stream": false,
+        "agentMode": "langchain"
+      },
+      "expected_tools": ["get_students"],
+      "expected_outcome": "Returns list of students with graduation year 2025",
+      "pass_criteria": "Response contains student names and graduation year 2025"
+    },
+
+    {
+      "test_id": "STUDENT-003",
+      "category": "student_management",
+      "name": "Get Student Details",
+      "description": "Test retrieving specific student information",
+      "request": {
+        "message": "what is emily rodriguez gpa and test scores",
+        "stream": false,
+        "agentMode": "langchain"
+      },
+      "expected_tools": ["get_students"],
+      "expected_outcome": "Returns Emily's GPA, SAT, and ACT scores",
+      "pass_criteria": "Response includes numeric GPA and test scores"
+    },
+
+    {
+      "test_id": "STUDENT-004",
+      "category": "student_management",
+      "name": "Find At-Risk Students",
+      "description": "Test finding students with low progress",
+      "request": {
+        "message": "show me students with less than 30% application progress",
+        "stream": false,
+        "agentMode": "langchain"
+      },
+      "expected_tools": ["get_students"],
+      "expected_outcome": "Returns students with progress < 30%",
+      "pass_criteria": "Response lists students with low progress percentages"
+    },
+
+    {
+      "test_id": "STUDENT-005",
+      "category": "student_management",
+      "name": "Update Student Information",
+      "description": "Test proposing student info update",
+      "request": {
+        "message": "update sophia chen SAT score to 1580",
+        "stream": false,
+        "agentMode": "langchain"
+      },
+      "expected_tools": ["get_students", "update_student"],
+      "expected_outcome": "Proposes update with confirmation request",
+      "pass_criteria": "Response asks for confirmation and mentions Sophia Chen and 1580"
+    },
+
+    {
+      "test_id": "ESSAY-001",
+      "category": "essay_management",
+      "name": "List All Essays",
+      "description": "Test retrieving all essays in system",
+      "request": {
+        "message": "list all essays in the system",
+        "stream": false,
+        "agentMode": "langchain"
+      },
+      "expected_tools": ["get_essays"],
+      "expected_outcome": "Returns list of essays with titles and students",
+      "pass_criteria": "Response contains essay titles and student names"
+    },
+
+    {
+      "test_id": "ESSAY-002",
+      "category": "essay_management",
+      "name": "Get Student Essays",
+      "description": "Test retrieving essays for specific student",
+      "request": {
+        "message": "show me all essays for sophia chen",
+        "stream": false,
+        "agentMode": "langchain"
+      },
+      "expected_tools": ["get_students", "get_essays"],
+      "expected_outcome": "Returns Sophia's essays",
+      "pass_criteria": "Response lists essays linked to Sophia Chen"
+    },
+
+    {
+      "test_id": "ESSAY-003",
+      "category": "essay_management",
+      "name": "Open Essay in Canvas",
+      "description": "Test opening essay canvas for editing",
+      "request": {
+        "message": "open sophia chen personal statement essay",
+        "stream": false,
+        "agentMode": "langchain"
+      },
+      "expected_tools": ["get_students", "search_essays", "open_essay_canvas"],
+      "expected_outcome": "Essay canvas opens",
+      "pass_criteria": "Response mentions opening essay in canvas/editor"
+    },
+
+    {
+      "test_id": "ESSAY-004",
+      "category": "essay_management",
+      "name": "Create New Essay",
+      "description": "Test creating new essay for student",
+      "request": {
+        "message": "create a common app personal statement essay for emily rodriguez",
+        "stream": false,
+        "agentMode": "langchain"
+      },
+      "expected_tools": ["get_students", "create_essay"],
+      "expected_outcome": "Proposes essay creation with confirmation",
+      "pass_criteria": "Response asks for confirmation and mentions Emily Rodriguez and Common App"
+    },
+
+    {
+      "test_id": "ESSAY-005",
+      "category": "essay_management",
+      "name": "Update Essay Content",
+      "description": "Test updating essay title and status",
+      "request": {
+        "message": "change the essay title to 'My Journey' and mark it as in review",
+        "stream": false,
+        "agentMode": "langchain"
+      },
+      "expected_tools": ["update_essay_content"],
+      "expected_outcome": "Updates essay title and status",
+      "pass_criteria": "Response confirms update of title and status",
+      "note": "Requires essay_id context from previous interaction"
+    },
+
+    {
+      "test_id": "ESSAY-006",
+      "category": "essay_management",
+      "name": "Delete Essay",
+      "description": "Test proposing essay deletion",
+      "request": {
+        "message": "delete the draft essay for sophia chen",
+        "stream": false,
+        "agentMode": "langchain"
+      },
+      "expected_tools": ["get_students", "get_essays", "delete_essay"],
+      "expected_outcome": "Proposes deletion with warning and confirmation",
+      "pass_criteria": "Response warns about permanent deletion and asks for confirmation"
+    },
+
+    {
+      "test_id": "ESSAY-007",
+      "category": "essay_management",
+      "name": "AI Essay Suggestions - All",
+      "description": "Test getting comprehensive AI suggestions",
+      "request": {
+        "message": "give me suggestions for improving sophia chen personal statement",
+        "stream": false,
+        "agentMode": "langchain"
+      },
+      "expected_tools": ["get_students", "search_essays", "ai_essay_suggestions"],
+      "expected_outcome": "Returns AI suggestions for grammar, style, content, structure",
+      "pass_criteria": "Response includes specific suggestions and improvements"
+    },
+
+    {
+      "test_id": "ESSAY-008",
+      "category": "essay_management",
+      "name": "AI Grammar Check",
+      "description": "Test getting grammar-specific suggestions",
+      "request": {
+        "message": "check grammar and spelling in emily rodriguez essay",
+        "stream": false,
+        "agentMode": "langchain"
+      },
+      "expected_tools": ["get_students", "search_essays", "ai_essay_suggestions"],
+      "expected_outcome": "Returns grammar and spelling corrections",
+      "pass_criteria": "Response focuses on grammar errors and corrections"
+    },
+
+    {
+      "test_id": "TASK-001",
+      "category": "task_management",
+      "name": "List Upcoming Deadlines",
+      "description": "Test retrieving upcoming deadlines",
+      "request": {
+        "message": "what deadlines are coming up in the next 14 days",
+        "stream": false,
+        "agentMode": "langchain"
+      },
+      "expected_tools": ["get_upcoming_deadlines"],
+      "expected_outcome": "Returns tasks due within 14 days",
+      "pass_criteria": "Response lists tasks with due dates in next 2 weeks"
+    },
+
+    {
+      "test_id": "TASK-002",
+      "category": "task_management",
+      "name": "Find Overdue Tasks",
+      "description": "Test finding overdue tasks",
+      "request": {
+        "message": "show me all overdue tasks",
+        "stream": false,
+        "agentMode": "langchain"
+      },
+      "expected_tools": ["get_tasks"],
+      "expected_outcome": "Returns tasks past their due date",
+      "pass_criteria": "Response lists overdue tasks with dates"
+    },
+
+    {
+      "test_id": "TASK-003",
+      "category": "task_management",
+      "name": "Create Task",
+      "description": "Test creating new task for student",
+      "request": {
+        "message": "create a task for sophia chen to submit common app by november 1st",
+        "stream": false,
+        "agentMode": "langchain"
+      },
+      "expected_tools": ["get_students", "create_task"],
+      "expected_outcome": "Proposes task creation with confirmation",
+      "pass_criteria": "Response asks for confirmation and includes task details"
+    },
+
+    {
+      "test_id": "TASK-004",
+      "category": "task_management",
+      "name": "Update Task Status",
+      "description": "Test updating task to completed",
+      "request": {
+        "message": "mark the common app submission task as completed",
+        "stream": false,
+        "agentMode": "langchain"
+      },
+      "expected_tools": ["get_tasks", "update_task"],
+      "expected_outcome": "Proposes task update with confirmation",
+      "pass_criteria": "Response asks to confirm marking task as completed"
+    },
+
+    {
+      "test_id": "COLLEGE-001",
+      "category": "college_management",
+      "name": "Search Colleges",
+      "description": "Test searching colleges by name",
+      "request": {
+        "message": "find colleges with stanford in the name",
+        "stream": false,
+        "agentMode": "langchain"
+      },
+      "expected_tools": ["get_colleges"],
+      "expected_outcome": "Returns colleges matching 'Stanford'",
+      "pass_criteria": "Response includes Stanford and related colleges"
+    },
+
+    {
+      "test_id": "COLLEGE-002",
+      "category": "college_management",
+      "name": "Filter Colleges by State",
+      "description": "Test filtering colleges by location",
+      "request": {
+        "message": "show me all colleges in california",
+        "stream": false,
+        "agentMode": "langchain"
+      },
+      "expected_tools": ["get_colleges"],
+      "expected_outcome": "Returns colleges in CA",
+      "pass_criteria": "Response lists California colleges"
+    },
+
+    {
+      "test_id": "COLLEGE-003",
+      "category": "college_management",
+      "name": "Get Student College List",
+      "description": "Test retrieving student's application list",
+      "request": {
+        "message": "what colleges is sophia chen applying to",
+        "stream": false,
+        "agentMode": "langchain"
+      },
+      "expected_tools": ["get_students", "get_student_colleges"],
+      "expected_outcome": "Returns Sophia's college list with application types",
+      "pass_criteria": "Response lists colleges and application types (ED/EA/RD)"
+    },
+
+    {
+      "test_id": "COLLEGE-004",
+      "category": "college_management",
+      "name": "Remove College from List",
+      "description": "Test removing college from student's list",
+      "request": {
+        "message": "remove stanford from sophia chen college list",
+        "stream": false,
+        "agentMode": "langchain"
+      },
+      "expected_tools": ["get_students", "get_colleges", "remove_college_from_student"],
+      "expected_outcome": "Proposes removal with confirmation",
+      "pass_criteria": "Response asks for confirmation and mentions Stanford and Sophia"
+    },
+
+    {
+      "test_id": "AI-001",
+      "category": "ai_features",
+      "name": "Generate Insights",
+      "description": "Test generating AI insights about students",
+      "request": {
+        "message": "generate insights about at-risk students",
+        "stream": false,
+        "agentMode": "langgraph"
+      },
+      "expected_tools": ["generate_insights"],
+      "expected_outcome": "Returns actionable insights about at-risk students",
+      "pass_criteria": "Response includes specific insights and recommendations"
+    },
+
+    {
+      "test_id": "AI-002",
+      "category": "ai_features",
+      "name": "Calculate Statistics",
+      "description": "Test calculating aggregate statistics",
+      "request": {
+        "message": "what is the average gpa of all students",
+        "stream": false,
+        "agentMode": "langgraph"
+      },
+      "expected_tools": ["calculate_statistics"],
+      "expected_outcome": "Returns average GPA calculation",
+      "pass_criteria": "Response includes numeric average GPA"
+    },
+
+    {
+      "test_id": "AI-003",
+      "category": "ai_features",
+      "name": "Generate Letter of Recommendation",
+      "description": "Test LOR generation",
+      "request": {
+        "message": "generate a letter of recommendation for sophia chen applying to stanford",
+        "stream": false,
+        "agentMode": "langchain"
+      },
+      "expected_tools": ["get_students", "generate_letter_of_recommendation"],
+      "expected_outcome": "Proposes LOR generation with confirmation",
+      "pass_criteria": "Response asks for confirmation and mentions LOR for Sophia"
+    },
+
+    {
+      "test_id": "AI-004",
+      "category": "ai_features",
+      "name": "College Recommendations",
+      "description": "Test AI college recommendations",
+      "request": {
+        "message": "recommend colleges for emily rodriguez based on her profile",
+        "stream": false,
+        "agentMode": "langchain"
+      },
+      "expected_tools": ["get_students", "college_recommendations"],
+      "expected_outcome": "Returns personalized college recommendations",
+      "pass_criteria": "Response includes college suggestions with reasons"
+    }
+  ],
+
+  "test_instructions": {
+    "how_to_run": "Use curl or Postman to POST each test's request to http://localhost:3000/api/v1/chatbot/chat",
+    "example_curl": "curl -X POST http://localhost:3000/api/v1/chatbot/chat -H 'Content-Type: application/json' -d @test_request.json",
+    "validation": "Check that response includes expected_tools in execution logs and pass_criteria in message",
+    "test_order": "Tests can be run in any order, but STUDENT tests should run first to establish context"
+  },
+
+  "test_script": {
+    "description": "Automated test runner script",
+    "script_path": "tests/run_comprehensive_tests.sh",
+    "example": "#!/bin/bash\nfor test in $(jq -r '.tests[].test_id' COMPREHENSIVE_TESTS.json); do\n  echo \"Running test: $test\"\n  # Extract test request and run curl\n  # Parse response and check pass criteria\n  # Record result\ndone"
+  }
+}

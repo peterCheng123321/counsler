@@ -369,10 +369,57 @@ export const generateInsightsTool = new DynamicStructuredTool({
   }),
   func: async ({ analysisResults, context }) => {
     try {
+      // Import the LLM-powered insight generator
+      const { generateInsightsForCounselor } = await import("./insight-generator");
+      const { DEMO_USER_ID } = await import("@/lib/constants");
+
       // Parse the analysis results
       const data = JSON.parse(analysisResults);
 
-      // Generate insights based on the data
+      console.log("[generate_insights] Using LLM-powered insight generation");
+
+      // Determine category from context
+      let category: "deadline" | "progress" | "essay" | "risk" | "all" = "all";
+      if (context) {
+        const contextLower = context.toLowerCase();
+        if (contextLower.includes("deadline")) category = "deadline";
+        else if (contextLower.includes("progress")) category = "progress";
+        else if (contextLower.includes("essay")) category = "essay";
+        else if (contextLower.includes("risk")) category = "risk";
+      }
+
+      // Generate insights using LLM
+      const generatedInsights = await generateInsightsForCounselor({
+        counselorId: DEMO_USER_ID,
+        category,
+        maxInsights: 5,
+        temperature: 0.3,
+      });
+
+      // Format insights for response
+      const insights = generatedInsights.map((insight) => ({
+        category: insight.category,
+        priority: insight.priority,
+        finding: insight.finding,
+        recommendation: insight.recommendation,
+        related_data: insight.related_data,
+        confidence_score: insight.confidence_score,
+      }));
+
+      return JSON.stringify({
+        insights,
+        totalInsights: insights.length,
+        highPriority: insights.filter((i) => i.priority === "high").length,
+        timestamp: new Date().toISOString(),
+        generated_by: "llm",
+      });
+    } catch (error) {
+      console.error("[generate_insights] Error:", error);
+
+      // Fallback to simple rule-based insights if LLM fails
+      console.warn("[generate_insights] LLM generation failed, using fallback logic");
+
+      const data = JSON.parse(analysisResults);
       const insights: Array<{
         category: string;
         priority: "high" | "medium" | "low";
@@ -380,55 +427,12 @@ export const generateInsightsTool = new DynamicStructuredTool({
         recommendation: string;
       }> = [];
 
-      // Example insight generation logic
-      // In production, this could use an LLM to generate more sophisticated insights
-      if (data.completionRate !== undefined) {
-        const rate = data.completionRate;
-        if (rate < 50) {
-          insights.push({
-            category: "productivity",
-            priority: "high",
-            finding: `Task completion rate is low at ${rate}%`,
-            recommendation:
-              "Review task assignments and deadlines. Consider breaking down complex tasks.",
-          });
-        } else if (rate > 80) {
-          insights.push({
-            category: "productivity",
-            priority: "low",
-            finding: `Excellent task completion rate of ${rate}%`,
-            recommendation: "Maintain current workflow and consider increasing capacity.",
-          });
-        }
-      }
-
-      if (data.averageProgress !== undefined) {
-        const progress = data.averageProgress;
-        if (progress < 40) {
-          insights.push({
-            category: "student_progress",
-            priority: "high",
-            finding: `Average student progress is ${progress}%, below target`,
-            recommendation:
-              "Schedule check-ins with students to identify blockers and provide support.",
-          });
-        }
-      }
-
-      if (data.trendDirection === "declining") {
+      if (data.completionRate !== undefined && data.completionRate < 50) {
         insights.push({
-          category: "trends",
+          category: "productivity",
           priority: "high",
-          finding: "Performance trend is declining",
-          recommendation:
-            "Investigate root causes and implement corrective actions immediately.",
-        });
-      } else if (data.trendDirection === "improving") {
-        insights.push({
-          category: "trends",
-          priority: "low",
-          finding: "Performance trend is improving",
-          recommendation: "Document successful practices for replication.",
+          finding: `Task completion rate is low at ${data.completionRate}%`,
+          recommendation: "Review task assignments and deadlines. Consider breaking down complex tasks.",
         });
       }
 
@@ -437,11 +441,8 @@ export const generateInsightsTool = new DynamicStructuredTool({
         totalInsights: insights.length,
         highPriority: insights.filter((i) => i.priority === "high").length,
         timestamp: new Date().toISOString(),
-      });
-    } catch (error) {
-      console.error("[generate_insights] Error:", error);
-      return JSON.stringify({
-        error: error instanceof Error ? error.message : "Unknown error",
+        generated_by: "fallback",
+        error: error instanceof Error ? error.message : "LLM generation failed",
       });
     }
   },

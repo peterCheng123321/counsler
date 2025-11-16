@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { z } from "zod";
 import { DEMO_USER_ID } from "@/lib/constants";
-import { getStudentTool } from "@/lib/ai/langchain-tools";
+import { getStudentTool } from "@/lib/ai/tools";
 
 const updateStudentSchema = z.object({
   firstName: z.string().min(2).max(50).optional(),
@@ -127,5 +127,8 @@ export async function DELETE(
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
+
+
+
 
 

@@ -40,7 +40,7 @@ async function queryWithRetry<T>(
 export const getStudentsTool = new DynamicStructuredTool({
   name: "get_students",
   description:
-    "Query students with optional filters. Use this to find students by name, graduation year, or application progress. Always returns data even if filters don't match anything.",
+    "Query students with optional filters. Use this to find students by name (first, last, or full), graduation year, or application progress. The search is case-insensitive and matches partial names. If you get 0 results, try searching with just first name or just last name separately. Always returns data even if filters don't match anything.",
   schema: z.object({
     search: z
       .string()
@@ -106,11 +106,23 @@ export const getStudentsTool = new DynamicStructuredTool({
       const result = data || [];
       queryCache.set(userId, "students", result, cacheKey);
 
-      return JSON.stringify({
+      // If search returned 0 results, add helpful guidance
+      const response: any = {
         students: result,
         count: result.length,
         filters: { search, graduationYear, progressMin, progressMax },
-      });
+      };
+
+      if (result.length === 0 && search) {
+        response.suggestion = `No students found matching "${search}". Try searching with just the first name or last name separately, or call get_students with no filters to see all students.`;
+        response.next_steps = [
+          "Try searching with just first name",
+          "Try searching with just last name",
+          "List all students to let user choose",
+        ];
+      }
+
+      return JSON.stringify(response);
     } catch (error) {
       console.error("Unexpected error in get_students:", error);
       return JSON.stringify({

@@ -3,7 +3,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { queryCache } from "@/lib/cache/query-cache";
 import { z } from "zod";
 import { DEMO_USER_ID } from "@/lib/constants";
-import { getTasksTool } from "@/lib/ai/langchain-tools";
+import { getTasksTool } from "@/lib/ai/tools";
 
 const taskSchema = z.object({
   title: z.string().min(1).max(255),

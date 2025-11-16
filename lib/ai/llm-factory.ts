@@ -104,6 +104,8 @@ function createAzureOpenAI(config: LLMConfig): AzureChatOpenAI {
     temperature,
     maxTokens,
     streaming,
+    timeout: 30000, // 30 second timeout for speed
+    maxRetries: 1, // Reduce retries for faster failure
   });
 }
 

@@ -3,7 +3,7 @@
 import { useState, useMemo, useEffect, Suspense } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useSearchParams } from "next/navigation";
-import { Plus, Search, Filter, Users, GraduationCap, Target, TrendingUp, Upload, Sparkles } from "lucide-react";
+import { Plus, Search, Filter, Users, Clock, Target, TrendingUp, Upload, Sparkles, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { StudentCard } from "@/components/students/student-card";
@@ -14,7 +14,6 @@ import { StatsCard } from "@/components/charts/stats-card";
 import { ProgressChart, type ProgressData } from "@/components/charts/progress-chart";
 import { StudentDistributionChart } from "@/components/charts/student-distribution-chart";
 import { QuickAIButton } from "@/components/ai/quick-ai-button";
-import { InsightsPanel } from "@/components/insights/insights-panel";
 import { apiClient, type Student } from "@/lib/api/client";
 import { toast } from "sonner";
 
@@ -28,6 +27,14 @@ function StudentsPageContent() {
     graduationYear?: number;
     progressMin?: number;
     progressMax?: number;
+    gpaMin?: number;
+    gpaMax?: number;
+    satMin?: number;
+    satMax?: number;
+    actMin?: number;
+    actMax?: number;
+    riskLevel?: string;
+    sortBy?: string;
   }>({});
 
   // Read URL parameters and apply filters
@@ -67,7 +74,94 @@ function StudentsPageContent() {
       }),
   });
 
-  const students = data?.data || [];
+  const rawStudents = data?.data || [];
+
+  // Client-side filtering and sorting
+  const students = useMemo(() => {
+    let filtered = [...rawStudents];
+
+    // Apply GPA filters
+    if (filters.gpaMin !== undefined) {
+      filtered = filtered.filter(s => (s.gpa || 0) >= filters.gpaMin!);
+    }
+    if (filters.gpaMax !== undefined) {
+      filtered = filtered.filter(s => (s.gpa || 0) <= filters.gpaMax!);
+    }
+
+    // Apply SAT filters
+    if (filters.satMin !== undefined) {
+      filtered = filtered.filter(s => (s.sat_score || 0) >= filters.satMin!);
+    }
+    if (filters.satMax !== undefined) {
+      filtered = filtered.filter(s => (s.sat_score || 0) <= filters.satMax!);
+    }
+
+    // Apply ACT filters
+    if (filters.actMin !== undefined) {
+      filtered = filtered.filter(s => (s.act_score || 0) >= filters.actMin!);
+    }
+    if (filters.actMax !== undefined) {
+      filtered = filtered.filter(s => (s.act_score || 0) <= filters.actMax!);
+    }
+
+    // Apply risk level filter
+    if (filters.riskLevel) {
+      const progress = (s: Student) => s.application_progress || 0;
+      switch (filters.riskLevel) {
+        case 'at-risk':
+          filtered = filtered.filter(s => progress(s) < 30);
+          break;
+        case 'on-track':
+          filtered = filtered.filter(s => progress(s) >= 30 && progress(s) < 70);
+          break;
+        case 'ahead':
+          filtered = filtered.filter(s => progress(s) >= 70);
+          break;
+      }
+    }
+
+    // Apply sorting
+    const sortBy = filters.sortBy || 'name';
+    switch (sortBy) {
+      case 'progress-desc':
+        filtered.sort((a, b) => (b.application_progress || 0) - (a.application_progress || 0));
+        break;
+      case 'progress-asc':
+        filtered.sort((a, b) => (a.application_progress || 0) - (b.application_progress || 0));
+        break;
+      case 'gpa-desc':
+        filtered.sort((a, b) => (b.gpa || 0) - (a.gpa || 0));
+        break;
+      case 'gpa-asc':
+        filtered.sort((a, b) => (a.gpa || 0) - (b.gpa || 0));
+        break;
+      case 'sat-desc':
+        filtered.sort((a, b) => (b.sat_score || 0) - (a.sat_score || 0));
+        break;
+      case 'act-desc':
+        filtered.sort((a, b) => (b.act_score || 0) - (a.act_score || 0));
+        break;
+      case 'year':
+        filtered.sort((a, b) => (a.graduation_year || 0) - (b.graduation_year || 0));
+        break;
+      case 'name':
+      default:
+        filtered.sort((a, b) =>
+          `${a.first_name} ${a.last_name}`.localeCompare(`${b.first_name} ${b.last_name}`)
+        );
+        break;
+    }
+
+    return filtered;
+  }, [rawStudents, filters]);
+
+  // Fetch tasks for upcoming deadlines calculation
+  const { data: tasksData } = useQuery({
+    queryKey: ["tasks", "upcoming"],
+    queryFn: () => apiClient.getTasks({}),
+  });
+
+  const tasks = tasksData?.data || [];
 
   // Calculate statistics
   const stats = useMemo(() => {
@@ -87,31 +181,34 @@ function StudentsPageContent() {
     ).length;
     const highProgress = students.filter((s) => (s.application_progress || 0) >= 70).length;
 
-    // Graduation years
-    const graduationYears = new Map<number, number>();
-    students.forEach((s) => {
-      if (s.graduation_year) {
-        graduationYears.set(
-          s.graduation_year,
-          (graduationYears.get(s.graduation_year) || 0) + 1
-        );
-      }
-    });
+    // Calculate upcoming deadlines (next 7 days)
+    const today = new Date();
+    const nextWeek = new Date(today);
+    nextWeek.setDate(today.getDate() + 7);
 
-    const currentYear = new Date().getFullYear();
-    const thisYear = graduationYears.get(currentYear) || 0;
+    const upcomingDeadlines = tasks.filter((task) => {
+      if (!task.due_date || task.status === 'completed') return false;
+      const dueDate = new Date(task.due_date);
+      return dueDate >= today && dueDate <= nextWeek;
+    }).length;
+
+    // Calculate at-risk students (< 30% progress)
+    const atRiskStudents = students.filter(
+      (s) => (s.application_progress || 0) < 30
+    ).length;
 
     return {
       total,
       avgProgress,
-      thisYear,
+      upcomingDeadlines,
+      atRiskStudents,
       progressDistribution: [
         { name: "Low Progress (0-30%)", value: lowProgress, color: "#ef4444" },
         { name: "Medium Progress (30-70%)", value: mediumProgress, color: "#f59e0b" },
         { name: "High Progress (70-100%)", value: highProgress, color: "#10b981" },
       ] as ProgressData[],
     };
-  }, [students]);
+  }, [students, tasks]);
 
   return (
     <div className="space-y-6">
@@ -185,56 +282,33 @@ function StudentsPageContent() {
             description="Overall application progress"
           />
           <StatsCard
-            title="Graduating This Year"
-            value={stats.thisYear}
-            icon={GraduationCap}
-            iconColor="text-green-600"
-            description={`Class of ${new Date().getFullYear()}`}
+            title="Upcoming Deadlines"
+            value={stats.upcomingDeadlines}
+            icon={Clock}
+            iconColor="text-amber-600"
+            description="Due in the next 7 days"
           />
           <StatsCard
-            title="High Progress"
-            value={stats.progressDistribution[2].value}
-            icon={TrendingUp}
-            iconColor="text-orange-600"
-            description="Students above 70% progress"
+            title="At Risk Students"
+            value={stats.atRiskStudents}
+            icon={AlertCircle}
+            iconColor="text-red-600"
+            description="Below 30% progress"
           />
         </div>
       )}
 
       {/* Charts */}
       {!isLoading && !error && students.length > 0 && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 lg:grid-cols-1 gap-4">
           <div className="rounded-xl border border-border bg-surface p-6 shadow-sm">
             <ProgressChart
               data={stats.progressDistribution}
               title="Application Progress Distribution"
             />
           </div>
-          <StudentDistributionChart
-            data={Array.from(
-              students.reduce((acc, s) => {
-                if (s.graduation_year) {
-                  acc.set(s.graduation_year, (acc.get(s.graduation_year) || 0) + 1);
-                }
-                return acc;
-              }, new Map<number, number>())
-            )
-              .map(([year, count]) => ({ name: year.toString(), count }))
-              .sort((a, b) => parseInt(a.name) - parseInt(b.name))}
-            title="Students by Graduation Year"
-            description="Distribution across graduating classes"
-            type="bar"
-          />
         </div>
       )}
-
-      {/* AI Insights */}
-      <div className="rounded-xl border border-border bg-surface p-6 shadow-sm">
-        <h2 className="text-heading-3 font-semibold text-text-primary mb-4">
-          AI Insights
-        </h2>
-        <InsightsPanel category="student" limit={5} />
-      </div>
 
       {/* Search and Filters */}
       <div className="flex flex-col sm:flex-row gap-4">
@@ -251,44 +325,93 @@ function StudentsPageContent() {
       </div>
 
       {/* Active Filters */}
-      {(filters.graduationYear ||
-        filters.progressMin !== undefined ||
-        filters.progressMax !== undefined) && (
+      {Object.values(filters).some(v => v !== undefined) && (
         <div className="flex flex-wrap gap-2">
+          {filters.sortBy && filters.sortBy !== 'name' && (
+            <div className="flex items-center gap-2 rounded-full bg-blue-50 border border-blue-200 px-3 py-1 text-sm text-blue-700">
+              <span className="text-xs font-medium">Sort:</span> {
+                filters.sortBy === 'progress-desc' ? 'Progress (High-Low)' :
+                filters.sortBy === 'progress-asc' ? 'Progress (Low-High)' :
+                filters.sortBy === 'gpa-desc' ? 'GPA (High-Low)' :
+                filters.sortBy === 'gpa-asc' ? 'GPA (Low-High)' :
+                filters.sortBy === 'sat-desc' ? 'SAT (High-Low)' :
+                filters.sortBy === 'act-desc' ? 'ACT (High-Low)' :
+                filters.sortBy === 'year' ? 'Graduation Year' :
+                filters.sortBy
+              }
+              <button
+                onClick={() => setFilters({ ...filters, sortBy: undefined })}
+                className="hover:text-blue-900"
+              >
+                ×
+              </button>
+            </div>
+          )}
+          {filters.riskLevel && (
+            <div className="flex items-center gap-2 rounded-full bg-purple-50 border border-purple-200 px-3 py-1 text-sm text-purple-700">
+              <span className="text-xs font-medium">Status:</span> {
+                filters.riskLevel === 'at-risk' ? 'At Risk' :
+                filters.riskLevel === 'on-track' ? 'On Track' :
+                'Ahead'
+              }
+              <button
+                onClick={() => setFilters({ ...filters, riskLevel: undefined })}
+                className="hover:text-purple-900"
+              >
+                ×
+              </button>
+            </div>
+          )}
           {filters.graduationYear && (
             <div className="flex items-center gap-2 rounded-full bg-primary-light px-3 py-1 text-sm text-primary-dark">
-              Graduation: {filters.graduationYear}
+              Class of {filters.graduationYear}
               <button
-                onClick={() =>
-                  setFilters({ ...filters, graduationYear: undefined })
-                }
+                onClick={() => setFilters({ ...filters, graduationYear: undefined })}
                 className="hover:text-primary"
               >
                 ×
               </button>
             </div>
           )}
-          {filters.progressMin !== undefined && (
-            <div className="flex items-center gap-2 rounded-full bg-primary-light px-3 py-1 text-sm text-primary-dark">
-              Progress: {filters.progressMin}%+
+          {(filters.gpaMin !== undefined || filters.gpaMax !== undefined) && (
+            <div className="flex items-center gap-2 rounded-full bg-green-50 border border-green-200 px-3 py-1 text-sm text-green-700">
+              <span className="text-xs font-medium">GPA:</span> {filters.gpaMin || 0} - {filters.gpaMax || 5.0}
               <button
-                onClick={() =>
-                  setFilters({ ...filters, progressMin: undefined })
-                }
-                className="hover:text-primary"
+                onClick={() => setFilters({ ...filters, gpaMin: undefined, gpaMax: undefined })}
+                className="hover:text-green-900"
               >
                 ×
               </button>
             </div>
           )}
-          {filters.progressMax !== undefined && (
-            <div className="flex items-center gap-2 rounded-full bg-primary-light px-3 py-1 text-sm text-primary-dark">
-              Progress: ≤{filters.progressMax}%
+          {(filters.satMin !== undefined || filters.satMax !== undefined) && (
+            <div className="flex items-center gap-2 rounded-full bg-amber-50 border border-amber-200 px-3 py-1 text-sm text-amber-700">
+              <span className="text-xs font-medium">SAT:</span> {filters.satMin || 400} - {filters.satMax || 1600}
               <button
-                onClick={() =>
-                  setFilters({ ...filters, progressMax: undefined })
-                }
-                className="hover:text-primary"
+                onClick={() => setFilters({ ...filters, satMin: undefined, satMax: undefined })}
+                className="hover:text-amber-900"
+              >
+                ×
+              </button>
+            </div>
+          )}
+          {(filters.actMin !== undefined || filters.actMax !== undefined) && (
+            <div className="flex items-center gap-2 rounded-full bg-indigo-50 border border-indigo-200 px-3 py-1 text-sm text-indigo-700">
+              <span className="text-xs font-medium">ACT:</span> {filters.actMin || 1} - {filters.actMax || 36}
+              <button
+                onClick={() => setFilters({ ...filters, actMin: undefined, actMax: undefined })}
+                className="hover:text-indigo-900"
+              >
+                ×
+              </button>
+            </div>
+          )}
+          {(filters.progressMin !== undefined || filters.progressMax !== undefined) && (
+            <div className="flex items-center gap-2 rounded-full bg-rose-50 border border-rose-200 px-3 py-1 text-sm text-rose-700">
+              <span className="text-xs font-medium">Progress:</span> {filters.progressMin || 0}% - {filters.progressMax || 100}%
+              <button
+                onClick={() => setFilters({ ...filters, progressMin: undefined, progressMax: undefined })}
+                className="hover:text-rose-900"
               >
                 ×
               </button>

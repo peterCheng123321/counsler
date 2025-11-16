@@ -2,22 +2,26 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { Building2, FileText, UserCheck, Clock } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Building2, FileText, UserCheck, Clock, Mail } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Button } from "@/components/ui/button";
 import { AIContextMenu } from "@/components/ai/ai-context-menu";
 import { AIConfirmationDialog } from "@/components/ai/ai-confirmation-dialog";
 import { format } from "date-fns";
 import type { Student } from "@/lib/api/client";
 import type { AIAction } from "@/lib/contexts/ai-context";
+import type { StudentStats } from "@/lib/types/database";
 
 interface StudentCardProps {
   student: Student;
 }
 
 export function StudentCard({ student }: StudentCardProps) {
+  const router = useRouter();
   const [pendingAction, setPendingAction] = useState<AIAction | null>(null);
   const [showConfirmation, setShowConfirmation] = useState(false);
   const [confirmationMessage, setConfirmationMessage] = useState("");
@@ -34,45 +38,36 @@ export function StudentCard({ student }: StudentCardProps) {
     setConfirmationMessage(message);
     setShowConfirmation(true);
   };
+
+  const handleGenerateLOR = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    router.push(`/students/${student.id}?tab=letters&action=generate`);
+  };
+
   const initials = `${student.first_name[0]}${student.last_name[0]}`.toUpperCase();
   const fullName = `${student.first_name} ${student.last_name}`;
 
-  // Fetch real data from database
+  // Fetch real data from database using aggregated stats endpoint
   useEffect(() => {
     const fetchStats = async () => {
       try {
         setLoading(true);
-        
-        // Fetch colleges applied
-        const collegesRes = await fetch(`/api/v1/students/${student.id}/colleges`);
-        const collegesData = await collegesRes.json();
-        const collegesApplied = collegesData.data?.length || 0;
 
-        // Fetch essays
-        const essaysRes = await fetch(`/api/v1/students/${student.id}/essays`);
-        const essaysData = await essaysRes.json();
-        const essaysComplete = essaysData.data?.filter((e: any) => e.status === "completed").length || 0;
+        // Single API call to get all stats (fixes N+1 query problem)
+        const statsRes = await fetch(`/api/v1/students/${student.id}/stats`);
 
-        // Fetch LORs
-        const lorsRes = await fetch(`/api/v1/students/${student.id}/lors`);
-        const lorsData = await lorsRes.json();
-        const lorsRequested = lorsData.data?.length || 0;
-
-        // Find next deadline from colleges
-        let nextDeadline = null as Date | null;
-        if (collegesData.data && collegesData.data.length > 0) {
-          const deadlines = collegesData.data
-            .filter((c: any) => c.deadline)
-            .map((c: any) => new Date(c.deadline))
-            .sort((a: Date, b: Date) => a.getTime() - b.getTime());
-          nextDeadline = deadlines[0] || null;
+        if (!statsRes.ok) {
+          throw new Error("Failed to fetch stats");
         }
 
+        const statsData = await statsRes.json();
+
         setStats({
-          collegesApplied,
-          essaysComplete,
-          lorsRequested,
-          nextDeadline,
+          collegesApplied: statsData.data.collegesApplied,
+          essaysComplete: statsData.data.essaysComplete,
+          lorsRequested: statsData.data.lorsRequested,
+          nextDeadline: statsData.data.nextDeadline ? new Date(statsData.data.nextDeadline) : null,
         });
       } catch (error) {
         console.error("Failed to fetch student stats:", error);
@@ -87,82 +82,68 @@ export function StudentCard({ student }: StudentCardProps) {
 
   return (
     <>
-      <AIContextMenu
-        entity={student}
-        entityType="student"
-        onActionSelect={handleActionSelect}
-      >
+      <Card className="hover:shadow-md transition-shadow">
         <Link href={`/students/${student.id}`}>
-          <Card className="cursor-pointer transition-all hover:shadow-lg hover:-translate-y-1">
-            <CardContent className="p-5">
-              {/* Header */}
-              <div className="mb-4 flex items-start gap-3">
-                <Avatar className="h-12 w-12 border-2 border-primary">
-                  <AvatarFallback className="bg-primary-light text-primary-dark font-semibold">
+          <CardContent className="p-4">
+            {/* Header - Simplified */}
+            <div className="flex items-start justify-between mb-3">
+              <div className="flex items-center gap-3">
+                <Avatar className="h-10 w-10">
+                  <AvatarFallback className="bg-primary/10 text-primary font-medium">
                     {initials}
                   </AvatarFallback>
                 </Avatar>
-                <div className="flex-1 min-w-0">
-                  <h3 className="text-lg font-semibold text-text-primary truncate">
+                <div>
+                  <h3 className="font-medium text-text-primary">
                     {fullName}
                   </h3>
-                  <p className="text-body-sm text-text-tertiary truncate">
-                    {student.email}
+                  <p className="text-sm text-text-secondary">
+                    Class of {student.graduation_year}
                   </p>
                 </div>
               </div>
 
-              {/* Progress Bar */}
-              <div className="mb-4">
-                <div className="mb-2 flex items-center justify-between">
-                  <span className="text-body-sm font-semibold text-primary">
-                    Progress
-                  </span>
-                  <span className="text-body-sm font-semibold text-text-secondary">
-                    {student.application_progress}%
-                  </span>
-                </div>
-                <Progress value={student.application_progress} />
-              </div>
+              {/* LOR Quick Action */}
+              <Button
+                onClick={handleGenerateLOR}
+                variant="ghost"
+                size="sm"
+                className="gap-1"
+              >
+                <Mail className="h-4 w-4" />
+                <span className="hidden sm:inline">LOR</span>
+              </Button>
+            </div>
 
-              {/* Stats */}
-              <div className="mb-4 space-y-2">
-                <div className="flex items-center gap-2 text-body-sm text-text-secondary">
-                  <Building2 className="h-4 w-4 text-primary" />
-                  <span>Applied: {stats.collegesApplied} colleges</span>
-                </div>
-                <div className="flex items-center gap-2 text-body-sm text-text-secondary">
-                  <FileText className="h-4 w-4 text-primary" />
-                  <span>Essays: {stats.essaysComplete} complete</span>
-                </div>
-                <div className="flex items-center gap-2 text-body-sm text-text-secondary">
-                  <UserCheck className="h-4 w-4 text-primary" />
-                  <span>LOR: {stats.lorsRequested} requested</span>
-                </div>
+            {/* Progress - Simplified */}
+            <div className="mb-3">
+              <div className="flex justify-between text-xs mb-1">
+                <span className="text-text-secondary">Progress</span>
+                <span className="font-medium">{student.application_progress}%</span>
               </div>
+              <Progress value={student.application_progress} className="h-2" />
+            </div>
 
-              {/* Next Deadline */}
+            {/* Key Stats - More compact */}
+            <div className="flex gap-4 text-sm text-text-secondary">
+              <div className="flex items-center gap-1">
+                <Building2 className="h-3.5 w-3.5" />
+                <span>{stats.collegesApplied}</span>
+              </div>
+              <div className="flex items-center gap-1">
+                <FileText className="h-3.5 w-3.5" />
+                <span>{stats.essaysComplete}</span>
+              </div>
               {stats.nextDeadline && (
-                <div className="rounded-md border border-warning bg-warning-light p-2">
-                  <div className="flex items-center gap-2 text-body-sm text-warning">
-                    <Clock className="h-4 w-4" />
-                    <span>
-                      Next: {format(stats.nextDeadline, "MMM d, yyyy")}
-                    </span>
-                  </div>
+                <div className="flex items-center gap-1 text-orange-600">
+                  <Clock className="h-3.5 w-3.5" />
+                  <span>{format(stats.nextDeadline, "MMM d")}</span>
                 </div>
               )}
-
-              {/* Graduation Year Badge */}
-              <div className="mt-4">
-                <Badge variant="secondary">
-                  Class of {student.graduation_year}
-                </Badge>
-              </div>
-            </CardContent>
-          </Card>
+            </div>
+          </CardContent>
         </Link>
-      </AIContextMenu>
+      </Card>
 
       {/* AI Confirmation Dialog */}
       <AIConfirmationDialog
@@ -177,5 +158,8 @@ export function StudentCard({ student }: StudentCardProps) {
     </>
   );
 }
+
+
+
 
 

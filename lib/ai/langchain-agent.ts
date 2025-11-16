@@ -4,9 +4,11 @@
  */
 
 import { BaseMessage, HumanMessage, AIMessage, SystemMessage } from "@langchain/core/messages";
-import { langchainTools } from "./langchain-tools";
+import { langchainTools, enhancedTools } from "./tools";
 import { crudTools } from "./langchain-tools-crud";
-import { enhancedTools } from "./enhanced-tools";
+import { canvasTools } from "./canvas-tools";
+import { essayTools } from "./essay-tools";
+import { collegeTools } from "./college-tools";
 import { createLLM, getActiveProviderInfo, type AIProvider, type LLMConfig } from "./llm-factory";
 
 const SYSTEM_PROMPT = `AI assistant for college application management (CAMP). Help counselors manage students, tasks, and deadlines.
@@ -16,6 +18,11 @@ const SYSTEM_PROMPT = `AI assistant for college application management (CAMP). H
 - get_tasks/get_task: Query/get tasks, deadlines, events
 - get_upcoming_deadlines: Check upcoming deadlines
 
+**CANVAS TOOLS** (Interactive UI):
+- open_student_canvas: Open student profile in interactive editor (MUST have exact student_id UUID)
+- open_essay_canvas: Open essay in interactive editor for viewing/editing
+- search_essays: Find essays by student name or title (use before open_essay_canvas)
+
 **WRITE TOOLS** (Propose with confirmation):
 - create/update/delete_student: Propose student changes
 - create/update/delete_task: Propose task/event changes
@@ -24,15 +31,21 @@ const SYSTEM_PROMPT = `AI assistant for college application management (CAMP). H
 
 **CRITICAL Rules**:
 1. Write tools require confirmation - propose clearly
-2. For student names: search with get_students first, then get by ID
-3. Tasks include ALL events: interviews, visits, tests, deadlines
-4. ALWAYS search before saying data doesn't exist
-5. Use markdown formatting, readable dates
+2. For student names: search with get_students first (supports full names like "Sophia Chen"), then get by ID
+3. Canvas tools: ALWAYS get student_id from get_students before calling open_student_canvas
+4. When user says "show me [name]" or "open [name]", use canvas tools to display interactive view
+5. Multi-word searches: "Sophia Chen" will match Sophia OR Chen - handle results appropriately
+6. Tasks include ALL events: interviews, visits, tests, deadlines
+7. ALWAYS search before saying data doesn't exist
+8. If get_students returns multiple matches, ask user to clarify
+9. Use markdown formatting, readable dates
 
 **Workflow**:
 - Query requests → Use tools directly
 - Write requests → Propose with confirmation
-- Student by name → Search first, get by ID second
+- Student by name → Search with get_students (e.g., search="Sophia Chen"), get ID, then open_student_canvas
+- "Show me X" / "Open X" → Use canvas tools for interactive view
+- Natural language → Parse and extract entities (names support first + last)
 - Be proactive, suggest related actions`;
 
 export interface LangChainAgentConfig extends LLMConfig {
@@ -81,8 +94,8 @@ export async function runLangChainAgent(
 
   const llm = createLLM(config);
 
-  // Bind read, write, and enhanced tools to the LLM
-  const allTools = [...langchainTools, ...crudTools, ...enhancedTools];
+  // Bind all tools to the LLM
+  const allTools = [...langchainTools, ...crudTools, ...enhancedTools, ...canvasTools, ...essayTools, ...collegeTools];
   const llmWithTools = llm.bindTools(allTools);
 
   // Extract the last user message

@@ -1,140 +1,99 @@
-"use client";
+'use client';
 
-import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { MessageCircle, Users, CheckSquare, Search, Bell, User, Sparkles, Brain } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { Input } from "@/components/ui/input";
-import { cn } from "@/lib/utils";
+import { useState } from 'react';
+import Link from 'next/link';
+import { usePathname } from 'next/navigation';
+import Image from 'next/image';
+import { Menu, X } from 'lucide-react';
+import { cn } from '@/lib/utils';
 
-const navItems = [
-  { href: "/chatbot", label: "Chatbot", icon: MessageCircle },
-  { href: "/students", label: "Students", icon: Users },
-  { href: "/tasks", label: "Tasks", icon: CheckSquare },
-  { href: "/agent-dashboard", label: "Agent", icon: Brain },
+const navigation = [
+  { name: 'Chatbot', href: '/chatbot' },
+  { name: 'Students', href: '/students' },
+  { name: 'Tasks', href: '/tasks' },
 ];
 
-interface HeaderProps {
-  onCommandPaletteOpen?: () => void;
-}
-
-export function Header({ onCommandPaletteOpen }: HeaderProps = {}) {
+export function Header() {
   const pathname = usePathname();
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   return (
-    <header className="sticky top-0 z-50 w-full border-b border-border bg-surface/95 backdrop-blur supports-[backdrop-filter]:bg-surface/60">
-      <div className="container flex h-20 items-center justify-between px-4 gap-4">
-        {/* Logo and Tagline */}
-        <Link href="/chatbot" className="flex items-center space-x-3 hover:opacity-80 transition-opacity">
-          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-gradient-to-br from-primary to-primary-hover text-white font-bold text-lg shadow-md">
-            C
-          </div>
-          <div className="flex flex-col">
-            <span className="font-bold text-lg hidden sm:inline-block text-text-primary">CAMP</span>
-            <span className="text-xs text-text-tertiary hidden md:inline-block font-medium">College App Management</span>
-          </div>
-        </Link>
-
-        {/* Navigation */}
-        <nav className="flex items-center space-x-1 ml-8">
-          {navItems.map((item) => {
-            const Icon = item.icon;
-            const isActive = pathname?.startsWith(item.href);
-            return (
-              <Link key={item.href} href={item.href}>
-                <Button
-                  variant={isActive ? "default" : "ghost"}
-                  className={cn(
-                    "gap-2 transition-all duration-300",
-                    isActive
-                      ? "bg-primary text-white shadow-md hover:bg-primary-hover"
-                      : "text-text-secondary hover:text-text-primary hover:bg-background/50"
-                  )}
-                >
-                  <Icon className="h-4 w-4" />
-                  <span className="hidden sm:inline font-medium">{item.label}</span>
-                </Button>
-              </Link>
-            );
-          })}
-        </nav>
-
-        {/* Right Side Actions */}
-        <div className="flex items-center space-x-3 ml-auto">
-          {/* Unified Search & AI Assistant */}
-          <Button
-            variant="outline"
-            className="gap-2 border-border/50 hover:border-primary hover:bg-primary/5 transition-all duration-300 w-auto lg:w-80 justify-start"
-            onClick={onCommandPaletteOpen}
-          >
-            <Search className="h-4 w-4 text-text-tertiary" />
-            <span className="hidden md:inline font-normal text-text-secondary text-sm">Search or ask AI...</span>
-            <div className="hidden lg:flex items-center gap-1 ml-auto">
-              <Sparkles className="h-3 w-3 text-primary" />
-              <kbd className="inline-flex h-5 select-none items-center gap-0.5 rounded border bg-muted px-1.5 font-mono text-[10px] font-medium">
-                Space Space
-              </kbd>
-            </div>
-          </Button>
-
-          {/* Notifications */}
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon" className="relative hover:bg-background/50 transition-colors">
-                <Bell className="h-5 w-5 text-text-secondary" />
-                <span className="absolute top-1 right-1 h-2 w-2 rounded-full bg-error animate-pulse"></span>
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-80">
-              <DropdownMenuLabel>Notifications</DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              <div className="max-h-96 overflow-y-auto">
-                <div className="p-4 text-sm text-text-secondary text-center">
-                  <Bell className="h-8 w-8 mx-auto mb-2 text-text-tertiary" />
-                  <p>No new notifications</p>
+    <header className="border-b border-gray-200 bg-white sticky top-0 z-50 shadow-sm">
+      <nav className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+        <div className="flex h-16 items-center justify-between">
+          <div className="flex items-center gap-2 sm:gap-3">
+            <Link href="/" className="flex items-center gap-2 sm:gap-3 hover:opacity-80 transition-opacity">
+              <div className="relative w-8 h-8 sm:w-10 sm:h-10 flex-shrink-0">
+                <div className="w-full h-full rounded-lg bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center text-white font-bold text-lg">
+                  U
                 </div>
               </div>
-            </DropdownMenuContent>
-          </DropdownMenu>
+              <span className="text-lg sm:text-xl font-bold text-gray-900 hidden sm:inline">
+                Undergraduation
+              </span>
+            </Link>
+          </div>
 
-          {/* User Menu */}
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" className="relative h-10 w-10 rounded-full hover:bg-background/50 transition-colors">
-                <Avatar>
-                  <AvatarImage src="" alt="User" />
-                  <AvatarFallback className="bg-primary text-white font-semibold">U</AvatarFallback>
-                </Avatar>
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-56">
-              <DropdownMenuLabel>My Account</DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem>Profile</DropdownMenuItem>
-              <DropdownMenuItem>Settings</DropdownMenuItem>
-              <DropdownMenuItem>Help</DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem asChild>
-                <form action="/auth/logout" method="POST">
-                  <button type="submit" className="w-full text-left">
-                    Logout
-                  </button>
-                </form>
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          {/* Desktop Navigation */}
+          <div className="hidden md:flex items-center space-x-6 lg:space-x-8">
+            {navigation.map((item) => {
+              const isActive = pathname?.startsWith(item.href);
+              return (
+                <Link
+                  key={item.name}
+                  href={item.href}
+                  className={cn(
+                    'text-sm font-medium transition-colors relative',
+                    isActive
+                      ? 'text-blue-600'
+                      : 'text-gray-700 hover:text-blue-600'
+                  )}
+                >
+                  {item.name}
+                  {isActive && (
+                    <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600 -mb-4" />
+                  )}
+                </Link>
+              );
+            })}
+          </div>
+
+          {/* Mobile menu button */}
+          <button
+            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+            className="md:hidden p-2 text-gray-700 hover:text-blue-600 transition-colors"
+            aria-label="Toggle menu"
+          >
+            {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
+          </button>
         </div>
-      </div>
+
+        {/* Mobile Navigation */}
+        {mobileMenuOpen && (
+          <div className="md:hidden pb-4 border-t border-gray-200 mt-2 pt-4">
+            <div className="flex flex-col space-y-3">
+              {navigation.map((item) => {
+                const isActive = pathname?.startsWith(item.href);
+                return (
+                  <Link
+                    key={item.name}
+                    href={item.href}
+                    onClick={() => setMobileMenuOpen(false)}
+                    className={cn(
+                      'px-3 py-2 text-base font-medium rounded-lg transition-colors',
+                      isActive
+                        ? 'text-blue-600 bg-blue-50'
+                        : 'text-gray-700 hover:bg-gray-50'
+                    )}
+                  >
+                    {item.name}
+                  </Link>
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </nav>
     </header>
   );
 }
-

@@ -3,8 +3,18 @@ import { createAdminClient } from "@/lib/supabase/admin";
 
 export async function GET(request: Request) {
   // Verify cron secret (Vercel cron protection)
+  const CRON_SECRET = process.env.CRON_SECRET;
+
+  if (!CRON_SECRET) {
+    console.error("CRON_SECRET is not set in environment variables");
+    return NextResponse.json(
+      { error: "Server configuration error" },
+      { status: 500 }
+    );
+  }
+
   const authHeader = request.headers.get("authorization");
-  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+  if (authHeader !== `Bearer ${CRON_SECRET}`) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -40,5 +50,8 @@ export async function GET(request: Request) {
     );
   }
 }
+
+
+
 
 
