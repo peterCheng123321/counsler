@@ -1272,7 +1272,7 @@ function ChatbotContent() {
                     essayId={canvasData.essayId}
                     studentId={canvasData.studentId || undefined}
                     onClose={() =>
-                      setCanvasData({ type: null, essayId: null, studentId: null, isExpanded: false })
+                      setCanvasData({ type: null, essayId: null, studentId: null, letterId: null, isExpanded: false })
                     }
                     isExpanded={true}
                     onToggleExpand={() =>
@@ -1288,7 +1288,7 @@ function ChatbotContent() {
                   <StudentCanvas
                     studentId={canvasData.studentId}
                     onClose={() =>
-                      setCanvasData({ type: null, essayId: null, studentId: null, isExpanded: false })
+                      setCanvasData({ type: null, essayId: null, studentId: null, letterId: null, isExpanded: false })
                     }
                     isExpanded={true}
                     onToggleExpand={() =>
@@ -1404,7 +1404,7 @@ function ChatbotContent() {
                 essayId={canvasData.essayId}
                 studentId={canvasData.studentId || undefined}
                 onClose={() =>
-                  setCanvasData({ type: null, essayId: null, studentId: null, isExpanded: false })
+                  setCanvasData({ type: null, essayId: null, studentId: null, letterId: null, isExpanded: false })
                 }
                 isExpanded={true}
                 onToggleExpand={() =>
@@ -1416,7 +1416,7 @@ function ChatbotContent() {
               <StudentCanvas
                 studentId={canvasData.studentId}
                 onClose={() =>
-                  setCanvasData({ type: null, essayId: null, studentId: null, isExpanded: false })
+                  setCanvasData({ type: null, essayId: null, studentId: null, letterId: null, isExpanded: false })
                 }
                 isExpanded={true}
                 onToggleExpand={() =>
