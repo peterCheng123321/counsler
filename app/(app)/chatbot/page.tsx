@@ -973,7 +973,9 @@ function ChatbotContent() {
 
         {/* Input Area - Completely Redesigned Floating Design */}
         <div className="border-t border-border/10 bg-gradient-to-t from-surface/50 via-background/95 to-transparent p-2 md:p-3 lg:p-4 backdrop-blur-xl">
-          <div className="mx-auto max-w-5xl space-y-4">
+          <div className={`mx-auto space-y-4 transition-all duration-500 ${
+            canvasData.type && !canvasData.isExpanded ? 'max-w-3xl' : 'max-w-5xl'
+          }`}>
             {/* Suggestion Chips - Above Input */}
             {messages.length > 0 && !isTyping && (
               <div className="px-2 animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -1041,13 +1043,14 @@ function ChatbotContent() {
                   className="hidden"
                 />
 
-                {/* Mode Selector - Compact */}
+                {/* Mode Selector - Extra compact when canvas is open */}
                 <div className="shrink-0">
                   <ModeSelector
                     selectedMode={selectedMode}
                     userRole={userRole}
                     onModeChange={setSelectedMode}
                     compact={true}
+                    className={canvasData.type ? "max-w-[140px]" : ""}
                   />
                 </div>
 
