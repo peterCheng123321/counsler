@@ -267,7 +267,9 @@ export const deleteEssayTool = new DynamicStructuredTool({
         });
       }
 
-      const studentName = essay.student ? `${essay.student.first_name} ${essay.student.last_name}` : "Unknown";
+      const studentName = essay.student && Array.isArray(essay.student) && essay.student[0]
+        ? `${essay.student[0].first_name} ${essay.student[0].last_name}`
+        : "Unknown";
 
       return JSON.stringify({
         action: "delete_essay",

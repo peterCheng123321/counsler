@@ -261,7 +261,7 @@ export function SmartTaskAssistant({
                 <Sparkles className="h-4 w-4 mr-2" />
                 AI Assistant
                 {overdueTasks > 0 && (
-                  <Badge variant="destructive" className="ml-2 h-5 px-1.5">
+                  <Badge variant="error" className="ml-2 h-5 px-1.5">
                     {overdueTasks}
                   </Badge>
                 )}
@@ -291,7 +291,7 @@ export function SmartTaskAssistant({
                   <Zap className="h-4 w-4 text-blue-600 mt-0.5 flex-shrink-0" />
                   <div className="flex-1 min-w-0">
                     <div className="font-medium text-text-primary group-hover:text-blue-700">
-                      Today's Focus
+                      Today&apos;s Focus
                     </div>
                     <div className="text-xs text-text-secondary mt-0.5">
                       {todayTasks > 0
@@ -314,7 +314,7 @@ export function SmartTaskAssistant({
                     <div className="flex-1 min-w-0">
                       <div className="font-medium text-text-primary group-hover:text-red-700 flex items-center gap-2">
                         Overdue Tasks
-                        <Badge variant="destructive" className="h-4 text-xs px-1.5">
+                        <Badge variant="error" className="h-4 text-xs px-1.5">
                           {overdueTasks}
                         </Badge>
                       </div>
@@ -431,8 +431,8 @@ export function SmartTaskAssistant({
                           <div className="flex items-center gap-2 flex-wrap">
                             <Badge
                               variant={
-                                task.priority === 'high' ? 'destructive' :
-                                task.priority === 'medium' ? 'default' :
+                                task.priority === 'high' ? 'error' :
+                                task.priority === 'medium' ? 'warning' :
                                 'secondary'
                               }
                               className="text-xs"

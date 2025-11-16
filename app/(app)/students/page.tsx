@@ -80,12 +80,12 @@ function StudentsPageContent() {
   const students = useMemo(() => {
     let filtered = [...rawStudents];
 
-    // Apply GPA filters
+    // Apply GPA filters (using weighted GPA if available, otherwise unweighted)
     if (filters.gpaMin !== undefined) {
-      filtered = filtered.filter(s => (s.gpa || 0) >= filters.gpaMin!);
+      filtered = filtered.filter(s => ((s.gpa_weighted || s.gpa_unweighted) || 0) >= filters.gpaMin!);
     }
     if (filters.gpaMax !== undefined) {
-      filtered = filtered.filter(s => (s.gpa || 0) <= filters.gpaMax!);
+      filtered = filtered.filter(s => ((s.gpa_weighted || s.gpa_unweighted) || 0) <= filters.gpaMax!);
     }
 
     // Apply SAT filters
@@ -130,10 +130,10 @@ function StudentsPageContent() {
         filtered.sort((a, b) => (a.application_progress || 0) - (b.application_progress || 0));
         break;
       case 'gpa-desc':
-        filtered.sort((a, b) => (b.gpa || 0) - (a.gpa || 0));
+        filtered.sort((a, b) => ((b.gpa_weighted || b.gpa_unweighted) || 0) - ((a.gpa_weighted || a.gpa_unweighted) || 0));
         break;
       case 'gpa-asc':
-        filtered.sort((a, b) => (a.gpa || 0) - (b.gpa || 0));
+        filtered.sort((a, b) => ((a.gpa_weighted || a.gpa_unweighted) || 0) - ((b.gpa_weighted || b.gpa_unweighted) || 0));
         break;
       case 'sat-desc':
         filtered.sort((a, b) => (b.sat_score || 0) - (a.sat_score || 0));
