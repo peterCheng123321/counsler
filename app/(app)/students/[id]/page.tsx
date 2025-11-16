@@ -443,7 +443,7 @@ export default function StudentDetailPage({
                   rows={1}
                 />
                 <Button
-                  onClick={handleSendMessage}
+                  onClick={() => handleSendMessage()}
                   disabled={!input.trim() || isTyping}
                   className="h-auto px-4 bg-primary hover:bg-primary-hover text-white transition-all duration-200"
                 >
