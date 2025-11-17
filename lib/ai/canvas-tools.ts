@@ -359,26 +359,31 @@ export const openStudentCanvasTool = new DynamicStructuredTool({
 export const openLetterCanvasTool = new DynamicStructuredTool({
   name: "open_letter_canvas",
   description: `Open a letter of recommendation in an interactive canvas within the chat interface.
-  Use this when the user wants to view, read, or edit an EXISTING letter of recommendation.
+  Use this when the user wants to view, read, or edit a letter of recommendation.
   The canvas will display the letter content with editing capabilities.
 
-  **CRITICAL WORKFLOW**:
-  1. If user asks to "see/view/open a letter" → use this tool
-  2. If this tool returns error "No letters found" → IMMEDIATELY call generate_recommendation_letter first
-  3. After generating, the letter will auto-open in canvas (do NOT call this tool again)
+  **SMART AUTO-GENERATION**: If no letter exists for the student, this tool will automatically
+  generate one and open it in the canvas - all in a single call! No need for separate steps.
 
-  **IMPORTANT**: You MUST have either letter_id OR student_id before calling this tool.
-  If you don't have the letter_id, use student_id to get their most recent letter.
+  **SIMPLE WORKFLOW**:
+  1. User asks to "see/view/open a letter" → just call this tool with student_id
+  2. Tool checks if letter exists
+  3. If exists → opens it in canvas
+  4. If not exists → auto-generates it AND opens it in canvas
+  5. Done! User sees the letter either way.
 
-  Examples of when to use:
-  - "Show me the letter of recommendation" → Try opening, if not found, generate it
-  - "Open the LOR for this student" → Try opening, if not found, generate it
-  - "Let me view the recommendation letter" → Try opening, if not found, generate it
-  - "I want to edit the letter" → Try opening, if not found, generate it
+  **IMPORTANT**: Provide either letter_id OR student_id.
+  - If you have letter_id → opens that specific letter
+  - If you have student_id → opens most recent letter, or auto-generates if none exist
 
-  If this tool returns an error saying no letter exists, you MUST tell the user:
-  "I don't see an existing letter for this student. Let me generate one for you now..."
-  Then immediately call generate_recommendation_letter.`,
+  Examples - all handle auto-generation automatically:
+  - "Show me the letter of recommendation" → Just call this tool
+  - "Open the LOR for this student" → Just call this tool
+  - "Let me view the recommendation letter" → Just call this tool
+  - "I want to edit the letter" → Just call this tool
+
+  The tool handles everything automatically. If it auto-generates, the response will include
+  "auto_generated: true" and a message explaining what happened.`,
 
   schema: z.object({
     letter_id: z.string().uuid().optional().describe("The UUID of the letter to open"),
@@ -455,17 +460,87 @@ export const openLetterCanvasTool = new DynamicStructuredTool({
       }
 
       if (!letter) {
+        // If letter doesn't exist and we have a student_id, auto-generate one
+        if (resolvedStudentId) {
+          console.log("[Canvas Tool] No letter found, auto-generating for student:", resolvedStudentId);
+
+          // Import and use the letter generator
+          const { generateRecommendationLetter } = await import("./lor-generator");
+
+          try {
+            // Fetch student details for generation
+            const { data: studentData } = await supabase
+              .from("students")
+              .select("*")
+              .eq("id", resolvedStudentId)
+              .single();
+
+            if (!studentData) {
+              return JSON.stringify({
+                success: false,
+                error: "Student not found for letter generation",
+              });
+            }
+
+            // Generate the letter
+            const generatedContent = await generateRecommendationLetter(studentData);
+
+            // Save the generated letter
+            const { data: newLetter, error: insertError } = await supabase
+              .from("letters_of_recommendation")
+              .insert({
+                student_id: resolvedStudentId,
+                counselor_id: studentData.counselor_id || "00000000-0000-0000-0000-000000000000",
+                generated_content: generatedContent,
+                status: "draft",
+              })
+              .select()
+              .single();
+
+            if (insertError || !newLetter) {
+              return JSON.stringify({
+                success: false,
+                error: "Failed to save generated letter",
+              });
+            }
+
+            // Calculate word count
+            const wordCount = generatedContent.trim().split(/\s+/).filter(Boolean).length;
+
+            // Return success with canvas marker for the newly generated letter
+            return JSON.stringify({
+              success: true,
+              auto_generated: true,
+              __canvas__: {
+                type: "letter",
+                action: "open",
+                data: {
+                  letter_id: newLetter.id,
+                  student_id: resolvedStudentId,
+                  student_name: `${studentData.first_name} ${studentData.last_name}`,
+                  word_count: wordCount,
+                  status: "draft",
+                }
+              },
+              message: `No existing letter found for ${studentData.first_name} ${studentData.last_name}. I've generated a new one and opened it in the canvas for you to review and edit.`,
+            });
+          } catch (genError) {
+            console.error("[Canvas Tool] Error auto-generating letter:", genError);
+            return JSON.stringify({
+              success: false,
+              error: "Failed to generate letter automatically",
+              details: genError instanceof Error ? genError.message : "Unknown error",
+            });
+          }
+        }
+
+        // If no student_id, can't auto-generate
         return JSON.stringify({
           success: false,
           error: "No letter found",
-          action_required: "generate_letter",
           message: letter_id
             ? "Letter not found with the provided ID. Please check the letter_id and try again."
-            : `No letter of recommendation found for ${student_name || 'this student'}. You should now call generate_recommendation_letter to create one, which will automatically open in the canvas when complete.`,
-          next_step: {
-            tool: "generate_recommendation_letter",
-            reason: "Letter doesn't exist yet, needs to be generated first",
-          }
+            : "No student information provided to generate a letter.",
         });
       }
 
